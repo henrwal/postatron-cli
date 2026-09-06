@@ -1,0 +1,42 @@
+name: Release
+
+# Tag a release with: git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ldflags="-s -w -X main.version=${VERSION} -X github.com/henrwal/postatron-cli/mcpserver.Version=${VERSION}"
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
+            os="${target%/*}"; arch="${target#*/}"
+            for cmd in postatron postatron-mcp; do
+              GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+                go build -ldflags="$ldflags" -o "build/${cmd}" "./cmd/${cmd}"
+            done
+            tar -czf "dist/postatron_${VERSION}_${os}_${arch}.tar.gz" -C build postatron postatron-mcp
+            rm -rf build
+          done
+          cd dist && shasum -a 256 *.tar.gz > checksums.txt && cat checksums.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
