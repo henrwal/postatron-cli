@@ -104,7 +104,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 | Code | What to do |
 | --- | --- |
 | `validation_error` | Read the message; it names the field. Fix it and retry, or ask. A message listing profiles means pick one, or ask. |
-| `quota_exceeded` | Stop and tell the person: they are at their plan's monthly limit. Do not retry. |
+| `quota_exceeded` | Stop and tell the person: they are at their plan's monthly limit. Do not retry. If `details.resource` is `x_link_posts`, only X posts with a link are capped: offer to post to X without the link, or to the other platforms. |
 | `rate_limited` | Wait for the seconds in `retry_after` (or the `Retry-After` header), then retry once. |
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
 | `subscription_required` | Postatron's API needs a paid plan. Tell the person. |
