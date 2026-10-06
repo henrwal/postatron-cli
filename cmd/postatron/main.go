@@ -1,4 +1,4 @@
-// Command postatron is the Postatron CLI: six commands, one per public API
+// Command postatron is the Postatron CLI: one command per public API
 // endpoint. Authenticate with --api-key or POSTATRON_API_KEY.
 package main
 
@@ -61,7 +61,7 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 	root := &cobra.Command{
 		Use:           "postatron",
 		Short:         "Create, schedule and manage Postatron posts from the terminal",
-		Long:          "Postatron CLI. Six commands, one per API endpoint. Set POSTATRON_API_KEY (or --api-key) with a key from https://postatron.com/dashboard/api.",
+		Long:          "Postatron CLI. One command per API endpoint. Set POSTATRON_API_KEY (or --api-key) with a key from https://postatron.com/dashboard/api.",
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -78,7 +78,9 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newGetPostCommand(g),
 		newDeletePostCommand(g),
 		newListAccountsCommand(g),
+		newListProfilesCommand(g),
 		newGetUsageCommand(g),
+		newGetAnalyticsCommand(g),
 	)
 	return root, g
 }
@@ -88,6 +90,9 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		content     string
 		platforms   []string
 		accountIDs  []string
+		profile     string
+		mediaURLs   []string
+		mediaIDs    []string
 		scheduledAt string
 	)
 	cmd := &cobra.Command{
@@ -95,9 +100,17 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		Short: "Create a post (publishes now, or at --scheduled-at)",
 		Example: `  postatron create-post --content "Launch day!" --platforms x,linkedin
   postatron create-post --content "Tomorrow 9am" --platforms bluesky --scheduled-at 2026-09-10T09:00:00Z
-  postatron create-post --content "Only this account" --account-ids 1234567890`,
+  postatron create-post --content "Only this account" --account-ids 1234567890
+  postatron create-post --content "For the Acme profile" --platforms x,instagram --profile Acme --media-urls https://example.com/launch.jpg`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			req := apiv1.CreatePostRequest{Content: content, Platforms: platforms, AccountIDs: accountIDs}
+			req := apiv1.CreatePostRequest{
+				Content:    content,
+				Platforms:  platforms,
+				AccountIDs: accountIDs,
+				Profile:    profile,
+				MediaURLs:  mediaURLs,
+				MediaIDs:   mediaIDs,
+			}
 			if scheduledAt != "" {
 				when, err := time.Parse(time.RFC3339, scheduledAt)
 				if err != nil {
@@ -117,8 +130,11 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&content, "content", "c", "", "post text (required)")
-	cmd.Flags().StringSliceVarP(&platforms, "platforms", "p", nil, "platforms to post to, e.g. x,linkedin (uses every connected account on each)")
+	cmd.Flags().StringSliceVarP(&platforms, "platforms", "p", nil, "platforms to post to, e.g. x,linkedin (the account on each, in --profile)")
 	cmd.Flags().StringSliceVarP(&accountIDs, "account-ids", "a", nil, "specific account ids from list-accounts")
+	cmd.Flags().StringVar(&profile, "profile", "", "profile name or id from list-profiles; needed when a platform has accounts in several profiles")
+	cmd.Flags().StringSliceVar(&mediaURLs, "media-urls", nil, "public https links to images or a video to attach (up to 4)")
+	cmd.Flags().StringSliceVar(&mediaIDs, "media-ids", nil, "upload ids to attach")
 	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "RFC 3339 time to schedule, at least 5 minutes ahead")
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
@@ -126,8 +142,8 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 
 func newListPostsCommand(g *globals) *cobra.Command {
 	var (
-		status, platform, from, to, cursor string
-		limit                              int
+		status, platform, profile, from, to, cursor string
+		limit                                       int
 	)
 	cmd := &cobra.Command{
 		Use:   "list-posts",
@@ -135,7 +151,7 @@ func newListPostsCommand(g *globals) *cobra.Command {
 		Example: `  postatron list-posts --status scheduled
   postatron list-posts --platform x --from 2026-09-01T00:00:00Z --to 2026-09-30T23:59:59Z`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			query := apiv1.ListPostsQuery{Status: status, Platform: platform, Limit: limit, Cursor: cursor}
+			query := apiv1.ListPostsQuery{Status: status, Platform: platform, Profile: profile, Limit: limit, Cursor: cursor}
 			if from != "" {
 				t, err := time.Parse(time.RFC3339, from)
 				if err != nil {
@@ -163,6 +179,7 @@ func newListPostsCommand(g *globals) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&status, "status", "", "scheduled, pending, processing, published, failed or partial")
 	cmd.Flags().StringVar(&platform, "platform", "", "only posts targeting this platform")
+	cmd.Flags().StringVar(&profile, "profile", "", "only posts to accounts in this profile (name or id)")
 	cmd.Flags().StringVar(&from, "from", "", "RFC 3339 start of range")
 	cmd.Flags().StringVar(&to, "to", "", "RFC 3339 end of range")
 	cmd.Flags().IntVar(&limit, "limit", 0, "page size (1-100, default 25)")
@@ -213,7 +230,8 @@ func newDeletePostCommand(g *globals) *cobra.Command {
 }
 
 func newListAccountsCommand(g *globals) *cobra.Command {
-	return &cobra.Command{
+	var profile string
+	cmd := &cobra.Command{
 		Use:   "list-accounts",
 		Short: "List connected social accounts",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -221,17 +239,85 @@ func newListAccountsCommand(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if profile != "" {
+				kept := list.Data[:0:0]
+				for _, a := range list.Data {
+					if a.ProfileID == profile || strings.EqualFold(a.ProfileName, profile) {
+						kept = append(kept, a)
+					}
+				}
+				list = &apiv1.AccountList{Data: kept}
+			}
 			if g.asJSON {
 				return printJSON(g.out, list)
 			}
 			tw := tabwriter.NewWriter(g.out, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "ID\tPLATFORM\tUSERNAME\tSTATUS\tCONNECTED")
+			fmt.Fprintln(tw, "ID\tPLATFORM\tUSERNAME\tPROFILE\tSTATUS\tCONNECTED")
 			for _, a := range list.Data {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", a.ID, a.Platform, a.Username, a.Status, a.ConnectedAt.Format("2006-01-02"))
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", a.ID, a.Platform, a.Username, a.ProfileName, a.Status, a.ConnectedAt.Format("2006-01-02"))
 			}
 			return tw.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&profile, "profile", "", "only accounts in this profile (name or id)")
+	return cmd
+}
+
+func newListProfilesCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list-profiles",
+		Short: "List profiles and the accounts in each",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			list, err := g.ops().ListProfiles(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, list)
+			}
+			tw := tabwriter.NewWriter(g.out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "ID\tNAME\tACCOUNTS")
+			for _, p := range list.Data {
+				accounts := make([]string, 0, len(p.Accounts))
+				for _, a := range p.Accounts {
+					accounts = append(accounts, a.Platform+":"+a.Username)
+				}
+				summary := strings.Join(accounts, ", ")
+				if summary == "" {
+					summary = "(none)"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", p.ID, p.Name, summary)
+			}
+			return tw.Flush()
+		},
+	}
+}
+
+func newGetAnalyticsCommand(g *globals) *cobra.Command {
+	var query apiv1.AnalyticsQuery
+	cmd := &cobra.Command{
+		Use:   "get-analytics",
+		Short: "Show post performance and audience for a 7, 30 or 90 day window",
+		Example: `  postatron get-analytics --range 7d
+  postatron get-analytics --profile Acme --platform instagram`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			report, err := g.ops().GetAnalytics(cmd.Context(), query)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, report)
+			}
+			printAnalytics(g.out, *report)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&query.Range, "range", "", "7d, 30d or 90d (default 30d)")
+	cmd.Flags().StringVar(&query.Platform, "platform", "", "only this platform")
+	cmd.Flags().StringVar(&query.AccountID, "account-id", "", "only this connected account")
+	cmd.Flags().StringVar(&query.Profile, "profile", "", "only accounts in this profile (name or id)")
+	cmd.Flags().StringVar(&query.Source, "source", "", "all (default) or postatron for posts made with Postatron only")
+	return cmd
 }
 
 func newGetUsageCommand(g *globals) *cobra.Command {
@@ -311,14 +397,24 @@ func printUsage(w io.Writer, r apiv1.UsageReport) {
 	fmt.Fprintf(w, "Plan: %s (%s, %s)  Period: %s to %s\n", r.Plan.Name, r.Plan.Interval, strings.ToLower(r.Plan.Status),
 		r.Period.Start.Format("2006-01-02"), r.Period.End.Add(-time.Second).Format("2006-01-02"))
 	fmt.Fprintf(w, "Destination-posts: %d / %d (%d remaining)\n", r.DestinationPosts.Used, r.DestinationPosts.Limit, r.DestinationPosts.Remaining)
-	fmt.Fprintf(w, "X link posts:      %d / %d (%d remaining)\n", r.XLinkPosts.Used, r.XLinkPosts.Limit, r.XLinkPosts.Remaining)
+	if r.XLinkPosts.Limit > 0 {
+		fmt.Fprintf(w, "X link posts:      %d / %d (%d remaining)\n", r.XLinkPosts.Used, r.XLinkPosts.Limit, r.XLinkPosts.Remaining)
+	} else {
+		// Counted for visibility, but no longer capped.
+		fmt.Fprintf(w, "X link posts:      %d (no cap)\n", r.XLinkPosts.Used)
+	}
 	fmt.Fprintf(w, "Link posts (all):  %d\n", r.LinkPosts.Used)
 	fmt.Fprintf(w, "Accounts:          %d / %d\n", r.Plan.ConnectedAccounts, r.Plan.MaxConnectedAccounts)
 	if r.Overage.Enabled {
 		fmt.Fprintf(w, "Overage:           %d destination-posts, %d X link posts (at $%.2f / $%.2f each)\n",
 			r.Overage.DestinationPosts, r.Overage.XLinkPosts, r.Overage.DestinationPostUnitPriceUSD, r.Overage.XLinkPostUnitPriceUSD)
 	}
-	fmt.Fprintf(w, "Rate limits:       %d writes/hour, %d reads/minute\n", r.RateLimits.WritesPerHour, r.RateLimits.ReadsPerMinute)
+	writes := r.RateLimits.WritesPerMinute
+	if writes == 0 {
+		// A server older than writes_per_minute.
+		writes = r.RateLimits.WritesPerHour / 60
+	}
+	fmt.Fprintf(w, "Rate limits:       %d writes, %d reads, %d uploads per minute\n", writes, r.RateLimits.ReadsPerMinute, r.RateLimits.UploadsPerMinute)
 
 	if len(r.ByPlatform) > 0 {
 		platforms := make([]string, 0, len(r.ByPlatform))
@@ -333,6 +429,46 @@ func printUsage(w io.Writer, r apiv1.UsageReport) {
 		}
 		_ = tw.Flush()
 	}
+}
+
+func printAnalytics(w io.Writer, r apiv1.AnalyticsReport) {
+	fmt.Fprintf(w, "Range: %s (%s to %s)\n", r.Range.Key, dateOf(r.Range.Start), dateOf(r.Range.End))
+	fmt.Fprintf(w, "Engagement rate: %.2f%% (%s)\n", r.Summary.EngagementRate, r.Summary.EngagementRateBasis)
+	fmt.Fprintf(w, "Engagements: %d  Reach: %d  Followers: %d  Posts: %d\n",
+		r.Summary.Engagements, r.Summary.Reach, r.Summary.Followers, r.Summary.PostsThisPeriod)
+
+	if len(r.PerPlatform) > 0 {
+		fmt.Fprintln(w, "\nPer platform:")
+		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "  PLATFORM\tPOSTS\tLIKES\tCOMMENTS\tSHARES\tVIEWS")
+		for _, row := range r.PerPlatform {
+			fmt.Fprintf(tw, "  %s\t%d\t%d\t%d\t%d\t%d\n", row.Platform, row.Posts, row.Likes, row.Comments, row.Shares, row.Views)
+		}
+		_ = tw.Flush()
+	}
+	if len(r.TopPosts) > 0 {
+		fmt.Fprintln(w, "\nTop posts:")
+		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "  PLATFORM\tPUBLISHED\tENGAGEMENT\tTEXT")
+		for _, p := range r.TopPosts {
+			fmt.Fprintf(tw, "  %s\t%s\t%d\t%s\n", p.Platform, dateOf(p.PublishedAt), p.Engagement, truncate(oneLine(p.Text), 50))
+		}
+		_ = tw.Flush()
+	}
+	for _, note := range r.Notes {
+		fmt.Fprintf(w, "\nNote: %s", note)
+	}
+	if len(r.Notes) > 0 {
+		fmt.Fprintln(w)
+	}
+}
+
+// dateOf trims an RFC 3339 timestamp to its date.
+func dateOf(timestamp string) string {
+	if len(timestamp) >= 10 {
+		return timestamp[:10]
+	}
+	return timestamp
 }
 
 func oneLine(s string) string {

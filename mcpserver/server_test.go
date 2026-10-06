@@ -20,6 +20,7 @@ type fakeOps struct {
 	listed   []apiv1.ListPostsQuery
 	deleted  []string
 	fetched  []string
+	analysed []apiv1.AnalyticsQuery
 	usageErr error
 }
 
@@ -50,6 +51,26 @@ func (f *fakeOps) ListAccounts(_ context.Context) (*apiv1.AccountList, error) {
 	return &apiv1.AccountList{Data: []apiv1.Account{{ID: "a1", Platform: "x", Username: "henry"}}}, nil
 }
 
+func (f *fakeOps) ListProfiles(_ context.Context) (*apiv1.ProfileList, error) {
+	return &apiv1.ProfileList{Data: []apiv1.Profile{{ID: "default", Name: "Default", IsDefault: true,
+		Accounts: []apiv1.Account{{ID: "a1", Platform: "x", Username: "henry", ProfileID: "default", ProfileName: "Default"}}}}}, nil
+}
+
+func (f *fakeOps) GetAnalytics(_ context.Context, q apiv1.AnalyticsQuery) (*apiv1.AnalyticsReport, error) {
+	f.analysed = append(f.analysed, q)
+	// The API always sends empty arrays, never null; the SDK validates that.
+	return &apiv1.AnalyticsReport{Range: apiv1.AnalyticsRange{Key: "30d"},
+		PerPlatform: []apiv1.AnalyticsPlatformRow{}, TopPosts: []apiv1.AnalyticsPost{}, Accounts: []apiv1.AnalyticsAccount{}}, nil
+}
+
+func (f *fakeOps) CreateUpload(_ context.Context, _ apiv1.CreateUploadRequest) (*apiv1.Upload, error) {
+	return &apiv1.Upload{ID: "u1", Status: "PENDING", UploadURL: "https://postatron.com/dashboard/upload?u=u1"}, nil
+}
+
+func (f *fakeOps) GetUpload(_ context.Context, id string) (*apiv1.Upload, error) {
+	return &apiv1.Upload{ID: id, Status: "READY"}, nil
+}
+
 func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
 	if f.usageErr != nil {
 		return nil, f.usageErr
@@ -73,7 +94,9 @@ func connect(t *testing.T, ops apiv1.Operations) *mcp.ClientSession {
 	return session
 }
 
-func TestExposesExactlySixTools(t *testing.T) {
+// The stdio server mirrors the remote one at api.postatron.com/mcp tool for
+// tool, so an agent behaves the same whichever it is connected to.
+func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 	session := connect(t, &fakeOps{})
 	tools, err := session.ListTools(context.Background(), nil)
 	require.NoError(t, err)
@@ -84,7 +107,10 @@ func TestExposesExactlySixTools(t *testing.T) {
 		assert.NotEmpty(t, tool.Description)
 		assert.NotNil(t, tool.InputSchema)
 	}
-	assert.ElementsMatch(t, []string{"create_post", "list_posts", "get_post", "delete_post", "list_accounts", "get_usage"}, names)
+	assert.ElementsMatch(t, []string{
+		"create_post", "list_posts", "get_post", "delete_post", "list_accounts", "list_profiles",
+		"get_usage", "get_analytics", "create_upload", "get_upload",
+	}, names)
 }
 
 func TestCreatePostTool(t *testing.T) {
@@ -120,6 +146,42 @@ func TestCreatePostTool(t *testing.T) {
 	assert.True(t, res.IsError, "bad timestamps are reported to the model, not raised")
 	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "scheduled_at must be RFC 3339")
 	assert.Len(t, ops.created, 1)
+
+	res, err = session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "create_post",
+		Arguments: map[string]any{"content": "for acme", "platforms": []string{"instagram"}, "profile": "Acme",
+			"media_urls": []string{"https://example.com/a.jpg"}, "media_ids": []string{"u1"}},
+	})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	require.Len(t, ops.created, 2)
+	assert.Equal(t, "Acme", ops.created[1].Profile)
+	assert.Equal(t, []string{"https://example.com/a.jpg"}, ops.created[1].MediaURLs)
+	assert.Equal(t, []string{"u1"}, ops.created[1].MediaIDs)
+}
+
+func TestProfileAnalyticsAndUploadTools(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_profiles", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"profile_name":"Default"`)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_analytics", Arguments: map[string]any{"range": "7d", "profile": "Acme", "platform": "instagram"}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	require.Len(t, ops.analysed, 1)
+	assert.Equal(t, apiv1.AnalyticsQuery{Range: "7d", Profile: "Acme", Platform: "instagram"}, ops.analysed[0])
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "create_upload", Arguments: map[string]any{"purpose": "launch photo"}})
+	require.NoError(t, err)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "dashboard/upload?u=u1")
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_upload", Arguments: map[string]any{"upload_id": "u1"}})
+	require.NoError(t, err)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"READY"`)
 }
 
 func TestReadToolsAndErrors(t *testing.T) {
@@ -127,11 +189,12 @@ func TestReadToolsAndErrors(t *testing.T) {
 	session := connect(t, ops)
 	ctx := context.Background()
 
-	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_posts", Arguments: map[string]any{"status": "published", "platform": "x", "from": "2026-09-01T00:00:00Z", "limit": 5}})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_posts", Arguments: map[string]any{"status": "published", "platform": "x", "profile": "Acme", "from": "2026-09-01T00:00:00Z", "limit": 5}})
 	require.NoError(t, err)
 	assert.False(t, res.IsError)
 	require.Len(t, ops.listed, 1)
 	assert.Equal(t, "published", ops.listed[0].Status)
+	assert.Equal(t, "Acme", ops.listed[0].Profile)
 	assert.Equal(t, 5, ops.listed[0].Limit)
 	require.NotNil(t, ops.listed[0].From)
 

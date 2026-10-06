@@ -57,6 +57,9 @@ func (c *Client) ListPosts(ctx context.Context, query ListPostsQuery) (*PostList
 	if query.Platform != "" {
 		params.Set("platform", query.Platform)
 	}
+	if query.Profile != "" {
+		params.Set("profile", query.Profile)
+	}
 	if query.From != nil {
 		params.Set("from", query.From.UTC().Format(time.RFC3339))
 	}
@@ -99,6 +102,54 @@ func (c *Client) DeletePost(ctx context.Context, id string) (*DeletePostResponse
 func (c *Client) ListAccounts(ctx context.Context) (*AccountList, error) {
 	var out AccountList
 	if err := c.do(ctx, http.MethodGet, "/v1/accounts", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListProfiles calls GET /v1/profiles.
+func (c *Client) ListProfiles(ctx context.Context) (*ProfileList, error) {
+	var out ProfileList
+	if err := c.do(ctx, http.MethodGet, "/v1/profiles", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetAnalytics calls GET /v1/analytics.
+func (c *Client) GetAnalytics(ctx context.Context, query AnalyticsQuery) (*AnalyticsReport, error) {
+	params := url.Values{}
+	for key, value := range map[string]string{
+		"range":      query.Range,
+		"platform":   query.Platform,
+		"account_id": query.AccountID,
+		"profile":    query.Profile,
+		"source":     query.Source,
+	} {
+		if value != "" {
+			params.Set(key, value)
+		}
+	}
+	var out AnalyticsReport
+	if err := c.do(ctx, http.MethodGet, "/v1/analytics", params, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateUpload calls POST /v1/media/uploads.
+func (c *Client) CreateUpload(ctx context.Context, req CreateUploadRequest) (*Upload, error) {
+	var out Upload
+	if err := c.do(ctx, http.MethodPost, "/v1/media/uploads", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetUpload calls GET /v1/media/uploads/{id}.
+func (c *Client) GetUpload(ctx context.Context, id string) (*Upload, error) {
+	var out Upload
+	if err := c.do(ctx, http.MethodGet, "/v1/media/uploads/"+url.PathEscape(id), nil, nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

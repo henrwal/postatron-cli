@@ -1,5 +1,5 @@
 // Command postatron-mcp is the Postatron MCP server. It speaks MCP over stdio
-// and forwards the six tools to the public API with your API key.
+// and forwards its tools to the public API with your API key.
 //
 //	POSTATRON_API_KEY=ptn_... postatron-mcp
 //

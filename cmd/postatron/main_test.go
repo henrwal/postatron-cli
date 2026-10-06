@@ -13,9 +13,10 @@ import (
 )
 
 type fakeOps struct {
-	created []apiv1.CreatePostRequest
-	listed  []apiv1.ListPostsQuery
-	deleted []string
+	created  []apiv1.CreatePostRequest
+	listed   []apiv1.ListPostsQuery
+	deleted  []string
+	analysed []apiv1.AnalyticsQuery
 }
 
 func (f *fakeOps) CreatePost(_ context.Context, req apiv1.CreatePostRequest) (*apiv1.Post, error) {
@@ -43,7 +44,37 @@ func (f *fakeOps) DeletePost(_ context.Context, id string) (*apiv1.DeletePostRes
 }
 
 func (f *fakeOps) ListAccounts(_ context.Context) (*apiv1.AccountList, error) {
-	return &apiv1.AccountList{Data: []apiv1.Account{{ID: "a1", Platform: "x", Username: "henry", Status: "connected", ConnectedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)}}}, nil
+	connected := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	return &apiv1.AccountList{Data: []apiv1.Account{
+		{ID: "a1", Platform: "x", Username: "henry", Status: "connected", ProfileID: "default", ProfileName: "Default", ConnectedAt: connected},
+		{ID: "a2", Platform: "x", Username: "acmehq", Status: "connected", ProfileID: "p-acme", ProfileName: "Acme", ConnectedAt: connected},
+	}}, nil
+}
+
+func (f *fakeOps) ListProfiles(_ context.Context) (*apiv1.ProfileList, error) {
+	return &apiv1.ProfileList{Data: []apiv1.Profile{
+		{ID: "default", Name: "Default", IsDefault: true, Accounts: []apiv1.Account{{Platform: "x", Username: "henry"}}},
+		{ID: "p-acme", Name: "Acme", Accounts: []apiv1.Account{}},
+	}}, nil
+}
+
+func (f *fakeOps) GetAnalytics(_ context.Context, q apiv1.AnalyticsQuery) (*apiv1.AnalyticsReport, error) {
+	f.analysed = append(f.analysed, q)
+	likes := int64(4)
+	return &apiv1.AnalyticsReport{
+		Range:       apiv1.AnalyticsRange{Key: "7d", Start: "2026-09-29T00:00:00Z", End: "2026-10-06T00:00:00Z"},
+		Summary:     apiv1.AnalyticsSummary{EngagementRate: 3.25, EngagementRateBasis: "reach", Engagements: 40, PostsThisPeriod: 3},
+		PerPlatform: []apiv1.AnalyticsPlatformRow{{Platform: "instagram", Posts: 3, Likes: 30}},
+		TopPosts:    []apiv1.AnalyticsPost{{Platform: "instagram", PublishedAt: "2026-10-01T09:00:00Z", Text: "Launch", Likes: &likes, Engagement: 12}},
+	}, nil
+}
+
+func (f *fakeOps) CreateUpload(_ context.Context, _ apiv1.CreateUploadRequest) (*apiv1.Upload, error) {
+	return &apiv1.Upload{ID: "u1"}, nil
+}
+
+func (f *fakeOps) GetUpload(_ context.Context, id string) (*apiv1.Upload, error) {
+	return &apiv1.Upload{ID: id}, nil
 }
 
 func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
@@ -53,8 +84,21 @@ func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
 		DestinationPosts: apiv1.UsageCounter{Used: 12, Limit: 300, Remaining: 288},
 		XLinkPosts:       apiv1.UsageCounter{Used: 1, Limit: 10, Remaining: 9},
 		ByPlatform:       map[string]int{"x": 7, "linkedin": 5},
-		RateLimits:       apiv1.UsageRateLimits{WritesPerHour: 60, ReadsPerMinute: 60},
+		RateLimits:       apiv1.UsageRateLimits{WritesPerMinute: 30, ReadsPerMinute: 60, UploadsPerMinute: 120, WritesPerHour: 1800},
 	}, nil
+}
+
+// uncappedUsage reports X link posts the way the API does since they stopped
+// being capped: a count with no limit.
+type uncappedUsage struct{ *fakeOps }
+
+func (u *uncappedUsage) GetUsage(ctx context.Context) (*apiv1.UsageReport, error) {
+	report, err := u.fakeOps.GetUsage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	report.XLinkPosts = apiv1.UsageCounter{Used: 1}
+	return report, nil
 }
 
 func run(t *testing.T, ops apiv1.Operations, args ...string) (string, error) {
@@ -67,7 +111,7 @@ func run(t *testing.T, ops apiv1.Operations, args ...string) (string, error) {
 	return stdout.String(), err
 }
 
-func TestSixCommands(t *testing.T) {
+func TestCommands(t *testing.T) {
 	root, _ := newRootCommand(&bytes.Buffer{}, &bytes.Buffer{})
 	names := make([]string, 0)
 	for _, cmd := range root.Commands() {
@@ -76,7 +120,9 @@ func TestSixCommands(t *testing.T) {
 		}
 		names = append(names, cmd.Name())
 	}
-	assert.ElementsMatch(t, []string{"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "get-usage"}, names)
+	assert.ElementsMatch(t, []string{
+		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "get-usage", "get-analytics",
+	}, names)
 }
 
 func TestCreatePost(t *testing.T) {
@@ -88,6 +134,14 @@ func TestCreatePost(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC), ops.created[0].ScheduledAt.UTC())
 	assert.Contains(t, out, "Post p1  [pending]")
 	assert.Contains(t, out, "@henry")
+
+	_, err = run(t, ops, "create-post", "--content", "For Acme", "--platforms", "instagram", "--profile", "Acme",
+		"--media-urls", "https://example.com/a.jpg,https://example.com/b.jpg", "--media-ids", "u1")
+	require.NoError(t, err)
+	require.Len(t, ops.created, 2)
+	assert.Equal(t, "Acme", ops.created[1].Profile)
+	assert.Equal(t, []string{"https://example.com/a.jpg", "https://example.com/b.jpg"}, ops.created[1].MediaURLs)
+	assert.Equal(t, []string{"u1"}, ops.created[1].MediaIDs)
 
 	_, err = run(t, ops, "create-post", "--content", "x", "--scheduled-at", "soon")
 	require.Error(t, err)
@@ -125,10 +179,34 @@ func TestHumanOutput(t *testing.T) {
 	out, err = run(t, ops, "list-accounts")
 	require.NoError(t, err)
 	assert.Contains(t, out, "henry")
+	assert.Contains(t, out, "PROFILE")
+
+	out, err = run(t, ops, "list-accounts", "--profile", "acme")
+	require.NoError(t, err)
+	assert.Contains(t, out, "acmehq", "profile names match regardless of case")
+	assert.NotContains(t, out, "henry ")
+
+	out, err = run(t, ops, "list-profiles")
+	require.NoError(t, err)
+	assert.Contains(t, out, "x:henry")
+	assert.Contains(t, out, "(none)")
+
+	out, err = run(t, ops, "get-analytics", "--range", "7d", "--profile", "Acme")
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.AnalyticsQuery{Range: "7d", Profile: "Acme"}, ops.analysed[0])
+	assert.Contains(t, out, "Engagement rate: 3.25% (reach)")
+	assert.Contains(t, out, "Launch")
 
 	out, err = run(t, ops, "get-usage")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Destination-posts: 12 / 300 (288 remaining)")
+	assert.Contains(t, out, "30 writes, 60 reads, 120 uploads per minute")
+	assert.Contains(t, out, "X link posts:      1 / 10 (9 remaining)", "a capped counter keeps its limit")
+
+	uncapped := &uncappedUsage{fakeOps: ops}
+	out, err = run(t, uncapped, "get-usage")
+	require.NoError(t, err)
+	assert.Contains(t, out, "X link posts:      1 (no cap)")
 	assert.Contains(t, out, "linkedin  5")
 }
 

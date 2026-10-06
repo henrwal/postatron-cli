@@ -1,5 +1,6 @@
-// Package mcpserver exposes the six public API operations as MCP tools. The
-// tool set is fixed: one tool per endpoint, same names as the CLI commands.
+// Package mcpserver exposes the public API operations as MCP tools: one tool
+// per endpoint, with the same names and arguments as the remote server at
+// https://api.postatron.com/mcp.
 package mcpserver
 
 import (
@@ -26,14 +27,21 @@ const (
 	ToolGetPost      = "get_post"
 	ToolDeletePost   = "delete_post"
 	ToolListAccounts = "list_accounts"
+	ToolListProfiles = "list_profiles"
 	ToolGetUsage     = "get_usage"
+	ToolGetAnalytics = "get_analytics"
+	ToolCreateUpload = "create_upload"
+	ToolGetUpload    = "get_upload"
 )
 
 // CreatePostInput is the create_post tool input.
 type CreatePostInput struct {
 	Content     string   `json:"content" jsonschema:"The text of the post. Links are detected automatically; posts to X that contain a link are metered separately."`
-	Platforms   []string `json:"platforms,omitempty" jsonschema:"Platforms to publish to, e.g. [\"x\",\"linkedin\",\"bluesky\",\"threads\",\"facebook\"]. Uses every connected account on each platform. Use this OR account_ids."`
+	Platforms   []string `json:"platforms,omitempty" jsonschema:"Platforms to publish to, e.g. [\"x\",\"linkedin\",\"bluesky\",\"threads\",\"facebook\"]. Posts to the account on each platform in profile. Use this OR account_ids."`
 	AccountIDs  []string `json:"account_ids,omitempty" jsonschema:"Specific connected account ids from list_accounts. Use this OR platforms."`
+	Profile     string   `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles. Required with platforms when a platform has accounts in more than one profile."`
+	MediaURLs   []string `json:"media_urls,omitempty" jsonschema:"Public https URLs of images or a video to attach (up to 4). Instagram and TikTok need one; YouTube needs a video."`
+	MediaIDs    []string `json:"media_ids,omitempty" jsonschema:"Upload ids from create_upload, for files on the person's own device."`
 	ScheduledAt string   `json:"scheduled_at,omitempty" jsonschema:"RFC 3339 timestamp (UTC) to schedule the post, at least 5 minutes ahead, e.g. 2026-09-10T09:00:00Z. Omit to publish now."`
 }
 
@@ -41,6 +49,7 @@ type CreatePostInput struct {
 type ListPostsInput struct {
 	Status   string `json:"status,omitempty" jsonschema:"Filter by status: scheduled, pending, processing, published, failed or partial."`
 	Platform string `json:"platform,omitempty" jsonschema:"Only posts that target this platform, e.g. x or linkedin."`
+	Profile  string `json:"profile,omitempty" jsonschema:"Only posts to accounts in this profile (a name or id from list_profiles)."`
 	From     string `json:"from,omitempty" jsonschema:"RFC 3339 start of the date range (scheduled_at for scheduled posts, created_at otherwise)."`
 	To       string `json:"to,omitempty" jsonschema:"RFC 3339 end of the date range."`
 	Limit    int    `json:"limit,omitempty" jsonschema:"Page size, 1-100 (default 25)."`
@@ -50,6 +59,25 @@ type ListPostsInput struct {
 // PostIDInput is shared by get_post and delete_post.
 type PostIDInput struct {
 	ID string `json:"id" jsonschema:"The post id."`
+}
+
+// AnalyticsInput is the get_analytics tool input.
+type AnalyticsInput struct {
+	Range     string `json:"range,omitempty" jsonschema:"One of 7d, 30d or 90d. Defaults to 30d."`
+	Platform  string `json:"platform,omitempty" jsonschema:"Only this platform, e.g. instagram, facebook, threads, tiktok, bluesky, linkedin, youtube."`
+	AccountID string `json:"account_id,omitempty" jsonschema:"Only this connected account (an id from list_accounts)."`
+	Profile   string `json:"profile,omitempty" jsonschema:"Only accounts in this profile (a name or id from list_profiles)."`
+	Source    string `json:"source,omitempty" jsonschema:"all (default) or postatron, to count only posts published with Postatron."`
+}
+
+// CreateUploadInput is the create_upload tool input.
+type CreateUploadInput struct {
+	Purpose string `json:"purpose,omitempty" jsonschema:"Optional note shown on the upload page, e.g. \"photo for your Tuesday post\"."`
+}
+
+// UploadIDInput is the get_upload tool input.
+type UploadIDInput struct {
+	ID string `json:"upload_id" jsonschema:"The id from create_upload."`
 }
 
 // EmptyInput is used by tools that take no arguments.
@@ -68,7 +96,14 @@ func New(ops apiv1.Operations) *mcp.Server {
 		Name:        ToolCreatePost,
 		Description: "Create a social media post. Publishes immediately unless scheduled_at is set. One post fanned out to N platforms consumes N destination-posts of the monthly quota.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CreatePostInput) (*mcp.CallToolResult, *apiv1.Post, error) {
-		req := apiv1.CreatePostRequest{Content: in.Content, Platforms: in.Platforms, AccountIDs: in.AccountIDs}
+		req := apiv1.CreatePostRequest{
+			Content:    in.Content,
+			Platforms:  in.Platforms,
+			AccountIDs: in.AccountIDs,
+			Profile:    in.Profile,
+			MediaURLs:  in.MediaURLs,
+			MediaIDs:   in.MediaIDs,
+		}
 		if strings.TrimSpace(in.ScheduledAt) != "" {
 			when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
 			if err != nil {
@@ -88,7 +123,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 		Description: "List posts, newest first, with optional status, platform and date filters. Returns next_cursor when more pages exist.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in ListPostsInput) (*mcp.CallToolResult, *apiv1.PostList, error) {
-		query := apiv1.ListPostsQuery{Status: in.Status, Platform: in.Platform, Limit: in.Limit, Cursor: in.Cursor}
+		query := apiv1.ListPostsQuery{Status: in.Status, Platform: in.Platform, Profile: in.Profile, Limit: in.Limit, Cursor: in.Cursor}
 		if strings.TrimSpace(in.From) != "" {
 			from, err := time.Parse(time.RFC3339, strings.TrimSpace(in.From))
 			if err != nil {
@@ -136,12 +171,63 @@ func New(ops apiv1.Operations) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        ToolListAccounts,
-		Description: "List the connected social accounts (id, platform, username, status). Use the ids or platforms with create_post.",
+		Description: "List the connected social accounts (id, platform, username, profile, status). Use the ids or platforms with create_post.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.AccountList, error) {
 		out, err := ops.ListAccounts(ctx)
 		if err != nil {
 			return handleError[*apiv1.AccountList](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        ToolListProfiles,
+		Description: "List profiles and the accounts in each. A profile groups accounts, usually one per brand or client, with at most one account per platform. Pass a profile to create_post to post as that brand.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.ProfileList, error) {
+		out, err := ops.ListProfiles(ctx)
+		if err != nil {
+			return handleError[*apiv1.ProfileList](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: ToolGetAnalytics,
+		Description: "How the posts and accounts are performing over the last 7, 30 or 90 days: engagement rate, reach, followers, " +
+			"totals per platform, the best posts, and any account that needs reconnecting. Metrics a platform does not report are null. X is not included.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in AnalyticsInput) (*mcp.CallToolResult, *apiv1.AnalyticsReport, error) {
+		out, err := ops.GetAnalytics(ctx, apiv1.AnalyticsQuery{
+			Range: in.Range, Platform: in.Platform, AccountID: in.AccountID, Profile: in.Profile, Source: in.Source,
+		})
+		if err != nil {
+			return handleError[*apiv1.AnalyticsReport](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: ToolCreateUpload,
+		Description: "Get a link the person can use to attach a photo or video from their own device. Give them the upload_url, wait for them to say they have uploaded it, " +
+			"check with get_upload, then pass the id to create_post as media_ids. Use this whenever the file is not already on the public internet.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CreateUploadInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
+		out, err := ops.CreateUpload(ctx, apiv1.CreateUploadRequest{Purpose: in.Purpose})
+		if err != nil {
+			return handleError[*apiv1.Upload](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        ToolGetUpload,
+		Description: "Report whether the person has uploaded their file yet: PENDING until they do, READY afterwards. Ask them to tell you when they are done rather than polling.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in UploadIDInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
+		out, err := ops.GetUpload(ctx, strings.TrimSpace(in.ID))
+		if err != nil {
+			return handleError[*apiv1.Upload](err)
 		}
 		return nil, out, nil
 	})

@@ -1,38 +1,62 @@
 # Postatron MCP server
 
-`postatron-mcp` lets an AI agent post, schedule and check delivery through the Model Context Protocol.
-It runs locally over stdio, talks to the REST API with your API key, and exposes exactly six tools, one per endpoint:
+Postatron lets an AI agent post, schedule, attach media, check delivery and read analytics through the Model Context Protocol.
+There are two ways to connect, with the same tools:
+
+- **Remote** (recommended): `https://api.postatron.com/mcp`, signed in with OAuth. Nothing to install and no key to manage.
+- **Local**: `postatron-mcp`, a binary that speaks MCP over stdio and calls the API with your API key, for clients that only launch local servers.
 
 | Tool | Endpoint | Arguments |
 | --- | --- | --- |
-| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `scheduled_at` |
-| `list_posts` | `GET /v1/posts` | `status`, `platform`, `from`, `to`, `limit`, `cursor` |
-| `get_post` | `GET /v1/posts/{id}` | `id` |
-| `delete_post` | `DELETE /v1/posts/{id}` | `id` |
+| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` |
+| `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
+| `get_post` | `GET /v1/posts/{id}` | post id |
+| `delete_post` | `DELETE /v1/posts/{id}` | post id |
 | `list_accounts` | `GET /v1/accounts` | none |
+| `list_profiles` | `GET /v1/profiles` | none |
 | `get_usage` | `GET /v1/usage` | none |
+| `get_analytics` | `GET /v1/analytics` | `range`, `platform`, `account_id`, `profile`, `source` |
+| `create_upload` | `POST /v1/media/uploads` | `purpose` |
+| `get_upload` | `GET /v1/media/uploads/{id}` | `upload_id` |
 
+The post id argument is `post_id` on the remote server and `id` on the local one.
 Tool calls are metered and rate limited exactly like the API (see `docs/api.md`).
-API errors come back as tool errors with the API's `code` and message, so the model can explain a quota or scope problem instead of failing silently.
+API errors come back as tool errors with the API's `code` and message, so the model can explain a quota or scope problem, or ask which profile you meant, instead of failing silently.
 
-## Install
+## Remote
 
-Prebuilt binaries are not published yet, so install from source with Go 1.23 or later:
+Claude: **Settings → Connectors → Add custom connector**, URL `https://api.postatron.com/mcp`, then sign in to Postatron and approve the connection.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http postatron https://api.postatron.com/mcp
+```
+
+Then run `/mcp` in a session to sign in.
+
+Any other client that supports remote MCP servers with OAuth 2.1 and dynamic client registration connects the same way.
+
+## Local
+
+### Install
+
+Install from source with Go 1.23 or later:
 
 ```bash
 go install github.com/henrwal/postatron-cli/cmd/postatron-mcp@latest
 ```
 
 The binary lands in `$(go env GOPATH)/bin`; make sure that directory is on your `PATH`.
-Or build from a checkout: `cd backend && make cli` produces `bin/postatron-mcp` and `bin/postatron`.
+Or build from a checkout: `make build` produces `bin/postatron-mcp` and `bin/postatron`.
 
-## Create an API key
+### Create an API key
 
 1. Sign in at `https://postatron.com/dashboard/api`.
 2. **New key**, name it (for example `Claude Desktop`), keep all four scopes or drop `posts:write` for a read-only agent.
 3. Copy the key. It is shown once.
 
-## Worked example: Claude Desktop
+### Claude Desktop
 
 1. Open Claude Desktop, then **Settings → Developer → Edit Config**.
    This opens `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`).
@@ -51,43 +75,23 @@ Or build from a checkout: `cd backend && make cli` produces `bin/postatron-mcp` 
    }
    ```
 
-   If `postatron-mcp` is not on Claude's `PATH`, use the absolute path, for example `/Users/henry/go/bin/postatron-mcp`.
+   If `postatron-mcp` is not on Claude's `PATH`, use the absolute path, for example `/Users/you/go/bin/postatron-mcp`.
 3. Restart Claude Desktop.
-   The tools icon shows `postatron` with six tools.
-4. Try it:
+   The tools icon shows `postatron` with ten tools.
 
-   > **You:** What have I got connected, and how much of my quota is left?
-   >
-   > **Claude** calls `list_accounts` and `get_usage`, then answers: "You have X (@henry), LinkedIn and Bluesky connected. This month you've used 42 of 300 destination-posts and 1 of 10 X link posts."
-   >
-   > **You:** Schedule "Shipping the Postatron API today. Docs in the thread." to X and LinkedIn for Wednesday at 9am UK time.
-   >
-   > **Claude** converts the time to UTC and calls `create_post` with `{"content": "...", "platforms": ["x", "linkedin"], "scheduled_at": "2026-09-09T08:00:00Z"}`, then confirms the post id and that two destination-posts were reserved.
-   >
-   > **You:** Actually cancel that.
-   >
-   > **Claude** calls `delete_post` with the id and reports `cancelled: true`.
-
-Claude will ask before running write tools (`create_post`, `delete_post`) unless you have allowed them for the session.
-
-## Claude Code
+### Claude Code
 
 ```bash
 claude mcp add postatron -e POSTATRON_API_KEY=ptn_YOUR_KEY -- postatron-mcp
 ```
 
-Then in a session: "use postatron to list my scheduled posts for next week".
 `claude mcp list` shows the server and `claude mcp remove postatron` drops it.
 
-## Other clients
+### Other clients
 
 Any client that launches stdio MCP servers works the same way (Cursor, Windsurf, VS Code, Zed): command `postatron-mcp`, environment `POSTATRON_API_KEY`.
 
-ChatGPT is different: its custom connectors only accept remote MCP servers protected by OAuth 2.1 with dynamic client registration, and reject API keys.
-Postatron does not host a remote MCP endpoint or an OAuth server in this release, so ChatGPT cannot connect yet.
-The CLI and the REST API are the alternatives for ChatGPT-driven automations (for example through an Action or a custom GPT calling the API).
-
-## Environment variables
+### Environment variables
 
 | Variable | Purpose |
 | --- | --- |
@@ -96,9 +100,26 @@ The CLI and the REST API are the alternatives for ChatGPT-driven automations (fo
 
 Logs go to stderr; stdout carries the protocol and must stay clean.
 
+## Worked example
+
+> **You:** What have I got connected, and how much of my quota is left?
+>
+> **Claude** calls `list_profiles` and `get_usage`, then answers: "Your Default profile has X (@henry) and LinkedIn; Acme has X (@acmehq) and Instagram. This month you've used 42 of 300 destination-posts."
+>
+> **You:** Schedule "New season, new shoes." with this photo to Acme's Instagram and X for Wednesday at 9am UK time.
+>
+> **Claude** calls `create_upload`, gives you the link, and once you say the photo is up, calls `create_post` with `{"content": "...", "platforms": ["instagram", "x"], "profile": "Acme", "media_ids": ["u_..."], "scheduled_at": "2026-09-09T08:00:00Z"}`.
+>
+> **You:** Actually cancel that.
+>
+> **Claude** calls `delete_post` with the id and reports `cancelled: true`.
+
+Claude asks before running write tools (`create_post`, `delete_post`, `create_upload`) unless you have allowed them for the session.
+
 ## Security notes
 
-- The key never leaves your machine except in the `Authorization` header to `api.postatron.com`.
+- With the remote server, no long-lived secret sits in a config file: access tokens expire and refresh tokens rotate on every use.
+- With the local server, the key never leaves your machine except in the `Authorization` header to `api.postatron.com`.
 - Give agents the narrowest scopes they need; a research agent only needs `posts:read`, `accounts:read` and `usage:read`.
 - Revoke keys from the dashboard the moment a laptop or config file is lost.
 - Scheduled posts need `scheduled_at` at least five minutes ahead; an agent that keeps proposing "now" gets a `validation_error` it can read and fix.

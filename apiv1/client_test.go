@@ -37,6 +37,15 @@ func TestClientRoundTrips(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(apiv1.DeletePostResponse{ID: "p1", Cancelled: true, Status: "cancelled"})
 		case r.URL.Path == "/v1/accounts":
 			_ = json.NewEncoder(w).Encode(apiv1.AccountList{Data: []apiv1.Account{{ID: "a1", Platform: "x"}}})
+		case r.URL.Path == "/v1/profiles":
+			_ = json.NewEncoder(w).Encode(apiv1.ProfileList{Data: []apiv1.Profile{{ID: "default", Name: "Default", IsDefault: true}}})
+		case r.URL.Path == "/v1/analytics":
+			_ = json.NewEncoder(w).Encode(apiv1.AnalyticsReport{Range: apiv1.AnalyticsRange{Key: "7d"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/media/uploads":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(apiv1.Upload{ID: "u1", Status: "PENDING"})
+		case r.URL.Path == "/v1/media/uploads/u1":
+			_ = json.NewEncoder(w).Encode(apiv1.Upload{ID: "u1", Status: "READY"})
 		case r.URL.Path == "/v1/usage":
 			_ = json.NewEncoder(w).Encode(apiv1.UsageReport{Plan: apiv1.UsagePlan{Code: "STARTER"}})
 		default:
@@ -49,18 +58,23 @@ func TestClientRoundTrips(t *testing.T) {
 	ctx := context.Background()
 
 	when := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
-	post, err := client.CreatePost(ctx, apiv1.CreatePostRequest{Content: "hi", Platforms: []string{"x"}, ScheduledAt: &when})
+	post, err := client.CreatePost(ctx, apiv1.CreatePostRequest{
+		Content: "hi", Platforms: []string{"x"}, Profile: "Acme",
+		MediaURLs: []string{"https://example.com/a.jpg"}, ScheduledAt: &when,
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "p1", post.ID)
 	assert.Equal(t, "Bearer ptn_test", gotAuth)
 	assert.Equal(t, "hi", gotBody.Content)
 	assert.Equal(t, []string{"x"}, gotBody.Platforms)
+	assert.Equal(t, "Acme", gotBody.Profile)
+	assert.Equal(t, []string{"https://example.com/a.jpg"}, gotBody.MediaURLs)
 
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	list, err := client.ListPosts(ctx, apiv1.ListPostsQuery{Status: "scheduled", Platform: "x", From: &from, Limit: 10, Cursor: "c1"})
+	list, err := client.ListPosts(ctx, apiv1.ListPostsQuery{Status: "scheduled", Platform: "x", Profile: "acme", From: &from, Limit: 10, Cursor: "c1"})
 	require.NoError(t, err)
 	assert.Equal(t, "c2", list.NextCursor)
-	assert.Equal(t, "cursor=c1&from=2026-09-01T00%3A00%3A00Z&limit=10&platform=x&status=scheduled", gotQuery)
+	assert.Equal(t, "cursor=c1&from=2026-09-01T00%3A00%3A00Z&limit=10&platform=x&profile=acme&status=scheduled", gotQuery)
 
 	got, err := client.GetPost(ctx, "p1")
 	require.NoError(t, err)
@@ -75,6 +89,22 @@ func TestClientRoundTrips(t *testing.T) {
 	accounts, err := client.ListAccounts(ctx)
 	require.NoError(t, err)
 	assert.Len(t, accounts.Data, 1)
+
+	profiles, err := client.ListProfiles(ctx)
+	require.NoError(t, err)
+	assert.True(t, profiles.Data[0].IsDefault)
+
+	report, err := client.GetAnalytics(ctx, apiv1.AnalyticsQuery{Range: "7d", Profile: "Acme"})
+	require.NoError(t, err)
+	assert.Equal(t, "7d", report.Range.Key)
+	assert.Equal(t, "profile=Acme&range=7d", gotQuery)
+
+	upload, err := client.CreateUpload(ctx, apiv1.CreateUploadRequest{Purpose: "launch photo"})
+	require.NoError(t, err)
+	assert.Equal(t, "PENDING", upload.Status)
+	upload, err = client.GetUpload(ctx, "u1")
+	require.NoError(t, err)
+	assert.Equal(t, "READY", upload.Status)
 
 	usage, err := client.GetUsage(ctx)
 	require.NoError(t, err)

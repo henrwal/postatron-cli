@@ -1,23 +1,35 @@
 # postatron-cli
 
-Command line client and [MCP](https://modelcontextprotocol.io) server for
-[Postatron](https://postatron.com), a social media scheduler that publishes one
-post to every platform you have connected.
+Command line client and [MCP](https://modelcontextprotocol.io) server for [Postatron](https://postatron.com), a social media scheduler that publishes one post to every platform you have connected.
 
-This repository holds everything you need to drive Postatron from a terminal or
-from an AI agent. The service itself is closed source.
+This repository holds everything you need to drive Postatron from a terminal or from an AI agent.
+The service itself is closed source.
 
-- `cmd/postatron` - the CLI, six commands.
-- `cmd/postatron-mcp` - an MCP server, six tools, so Claude can post for you.
-- `apiv1` - a Go client for the REST API, six endpoints.
+- `cmd/postatron` - the CLI.
+- `cmd/postatron-mcp` - a local MCP server over stdio, for clients that cannot reach a remote one.
+- `apiv1` - a Go client for the REST API, and the request and response types the API itself is built on.
 
-All three cover the same six operations, one for one.
+## Connect Claude (no install)
 
-## Install
+Postatron hosts its MCP server at:
 
-Download a binary for your platform from
-[Releases](https://github.com/henrwal/postatron-cli/releases), or build from
-source with Go 1.23 or newer:
+```
+https://api.postatron.com/mcp
+```
+
+Add it as a custom connector in Claude (Settings → Connectors → Add custom connector) and sign in when asked.
+Claude Code:
+
+```
+claude mcp add --transport http postatron https://api.postatron.com/mcp
+```
+
+Any client that supports remote MCP servers with OAuth 2.1 and dynamic client registration works the same way.
+There is no key to copy: the client registers itself and you approve it on a Postatron consent page.
+
+## Install the CLI
+
+Download a binary for your platform from [Releases](https://github.com/henrwal/postatron-cli/releases), or build from source with Go 1.23 or newer:
 
 ```
 go install github.com/henrwal/postatron-cli/cmd/postatron@latest
@@ -27,8 +39,8 @@ go install github.com/henrwal/postatron-cli/cmd/postatron-mcp@latest
 ## Get an API key
 
 Create one at [postatron.com/dashboard/api](https://postatron.com/dashboard/api).
-Keys are scoped, and the key is shown once at creation. The API, the MCP server
-and the CLI are included on every paid plan.
+Keys are scoped, and the key is shown once at creation.
+The API, the MCP server and the CLI are included on every paid plan.
 
 ```
 export POSTATRON_API_KEY=ptn_your_key_here
@@ -41,24 +53,29 @@ export POSTATRON_API_KEY=ptn_your_key_here
 ```
 postatron create-post --content "Shipping today." --platforms x,linkedin
 postatron create-post --content "Out on Friday." --platforms x --scheduled-at 2026-09-12T09:00:00Z
+postatron create-post --content "New in store" --platforms instagram --profile Acme --media-urls https://example.com/shoe.jpg
 postatron list-posts --status scheduled
 postatron get-post <id>
 postatron delete-post <id>
 postatron list-accounts
+postatron list-profiles
 postatron get-usage
+postatron get-analytics --range 7d
 ```
 
-Add `--json` to any command for the raw API response. Full reference in
-[docs/cli.md](docs/cli.md).
+Add `--json` to any command for the raw API response.
+Full reference in [docs/cli.md](docs/cli.md).
 
-## Connect Claude
+## Profiles
 
-Claude Code:
+A profile groups connected accounts, usually one per brand or client, and holds at most one account per platform.
+Everyone has a Default profile; paid plans can add more.
+Pass `--profile` (CLI) or `profile` (API and MCP) to post as one brand.
+When a platform has accounts in more than one profile, posting by platform without a profile is refused rather than sent to every brand at once.
 
-```
-claude mcp add postatron -e POSTATRON_API_KEY=$POSTATRON_API_KEY -- postatron-mcp
-```
+## Local MCP server
 
+For clients that only launch local servers, `postatron-mcp` exposes the same tools over stdio with an API key.
 Claude Desktop, in `claude_desktop_config.json`:
 
 ```json
@@ -72,11 +89,7 @@ Claude Desktop, in `claude_desktop_config.json`:
 }
 ```
 
-Claude then has `create_post`, `list_posts`, `get_post`, `delete_post`,
-`list_accounts` and `get_usage`. Worked example in [docs/mcp.md](docs/mcp.md).
-
-ChatGPT custom connectors are not supported, because they require OAuth 2.1 with
-dynamic client registration and reject bearer keys.
+Details in [docs/mcp.md](docs/mcp.md).
 
 ## Documentation
 
