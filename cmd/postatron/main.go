@@ -81,6 +81,8 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newListProfilesCommand(g),
 		newGetUsageCommand(g),
 		newGetAnalyticsCommand(g),
+		newCreateUploadCommand(g),
+		newGetUploadCommand(g),
 	)
 	return root, g
 }
@@ -290,6 +292,64 @@ func newListProfilesCommand(g *globals) *cobra.Command {
 			}
 			return tw.Flush()
 		},
+	}
+}
+
+// newCreateUploadCommand opens an upload slot: a link a person opens while
+// signed in to Postatron to pick a file from their own device. It is how an
+// agent attaches a file it cannot put on the public internet itself.
+func newCreateUploadCommand(g *globals) *cobra.Command {
+	var purpose string
+	cmd := &cobra.Command{
+		Use:     "create-upload",
+		Short:   "Get a link for someone to attach a photo or video from their device",
+		Example: `  postatron create-upload --purpose "photo for Tuesday's post"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			upload, err := g.ops().CreateUpload(cmd.Context(), apiv1.CreateUploadRequest{Purpose: purpose})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, upload)
+			}
+			printUpload(g.out, *upload)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&purpose, "purpose", "", "note shown on the upload page, so the person knows what to attach")
+	return cmd
+}
+
+func newGetUploadCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "get-upload <id>",
+		Short: "Check whether a file has arrived (PENDING, then READY)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			upload, err := g.ops().GetUpload(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, upload)
+			}
+			printUpload(g.out, *upload)
+			return nil
+		},
+	}
+}
+
+func printUpload(w io.Writer, u apiv1.Upload) {
+	fmt.Fprintf(w, "Upload %s  [%s]\n", u.ID, u.Status)
+	if u.Filename != "" {
+		fmt.Fprintf(w, "File:    %s\n", u.Filename)
+	}
+	if u.UploadURL != "" {
+		fmt.Fprintf(w, "Link:    %s\n", u.UploadURL)
+	}
+	fmt.Fprintf(w, "Expires: %s\n", u.ExpiresAt)
+	if u.Hint != "" {
+		fmt.Fprintf(w, "%s\n", u.Hint)
 	}
 }
 

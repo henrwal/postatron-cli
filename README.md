@@ -27,6 +27,16 @@ claude mcp add --transport http postatron https://api.postatron.com/mcp
 Any client that supports remote MCP servers with OAuth 2.1 and dynamic client registration works the same way.
 There is no key to copy: the client registers itself and you approve it on a Postatron consent page.
 
+## Agent skill
+
+```
+npx skills add henrwal/postatron-cli
+```
+
+Installs the `postatron` skill into Claude Code, Codex, Cursor and the other agents the [skills](https://skills.sh) CLI supports.
+It teaches the agent the workflow behind a request such as "schedule this to LinkedIn and X tomorrow at 9am": find the right profile, work out the time in your timezone, respect each platform's limits, attach media and confirm before anything is published.
+It works through the MCP tools when they are connected, and through the CLI or REST otherwise.
+
 ## Install the CLI
 
 Download a binary for your platform from [Releases](https://github.com/henrwal/postatron-cli/releases), or build from source with Go 1.23 or newer:
@@ -61,6 +71,8 @@ postatron list-accounts
 postatron list-profiles
 postatron get-usage
 postatron get-analytics --range 7d
+postatron create-upload --purpose "photo for Tuesday"
+postatron get-upload <id>
 ```
 
 Add `--json` to any command for the raw API response.

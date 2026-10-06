@@ -17,6 +17,7 @@ type fakeOps struct {
 	listed   []apiv1.ListPostsQuery
 	deleted  []string
 	analysed []apiv1.AnalyticsQuery
+	purposes []string
 }
 
 func (f *fakeOps) CreatePost(_ context.Context, req apiv1.CreatePostRequest) (*apiv1.Post, error) {
@@ -69,12 +70,13 @@ func (f *fakeOps) GetAnalytics(_ context.Context, q apiv1.AnalyticsQuery) (*apiv
 	}, nil
 }
 
-func (f *fakeOps) CreateUpload(_ context.Context, _ apiv1.CreateUploadRequest) (*apiv1.Upload, error) {
-	return &apiv1.Upload{ID: "u1"}, nil
+func (f *fakeOps) CreateUpload(_ context.Context, req apiv1.CreateUploadRequest) (*apiv1.Upload, error) {
+	f.purposes = append(f.purposes, req.Purpose)
+	return &apiv1.Upload{ID: "u1", Status: "PENDING", UploadURL: "https://postatron.com/dashboard/upload?u=u1", ExpiresAt: "2026-10-07T09:00:00Z"}, nil
 }
 
 func (f *fakeOps) GetUpload(_ context.Context, id string) (*apiv1.Upload, error) {
-	return &apiv1.Upload{ID: id}, nil
+	return &apiv1.Upload{ID: id, Status: "READY", Filename: "shoe.jpg", ExpiresAt: "2026-10-07T09:00:00Z"}, nil
 }
 
 func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
@@ -122,6 +124,7 @@ func TestCommands(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "get-usage", "get-analytics",
+		"create-upload", "get-upload",
 	}, names)
 }
 
@@ -214,4 +217,17 @@ func TestExitCodes(t *testing.T) {
 	assert.Equal(t, 3, exitCode(&apiv1.APIError{Code: apiv1.CodeUnauthorized}))
 	assert.Equal(t, 4, exitCode(&apiv1.APIError{Code: apiv1.CodeQuotaExceeded}))
 	assert.Equal(t, 1, exitCode(&apiv1.APIError{Code: apiv1.CodeInternal}))
+}
+
+func TestUploadCommands(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "create-upload", "--purpose", "launch photo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"launch photo"}, ops.purposes)
+	assert.Contains(t, out, "Link:    https://postatron.com/dashboard/upload?u=u1")
+
+	out, err = run(t, ops, "get-upload", "u1")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Upload u1  [READY]")
+	assert.Contains(t, out, "shoe.jpg")
 }

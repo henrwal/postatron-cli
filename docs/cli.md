@@ -32,9 +32,10 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron list-profiles` | `GET /v1/profiles` |
 | `postatron get-usage` | `GET /v1/usage` |
 | `postatron get-analytics` | `GET /v1/analytics` |
+| `postatron create-upload` | `POST /v1/media/uploads` |
+| `postatron get-upload <id>` | `GET /v1/media/uploads/{id}` |
 
 Add `--json` to any command to print the raw API response, which is the recommended mode for scripts.
-The upload endpoints are for agents that cannot send a file themselves; from a terminal, put the file somewhere public and use `--media-urls`.
 
 ### create-post
 
@@ -116,6 +117,17 @@ postatron get-analytics --source postatron
 
 Flags: `--range` (`7d`, `30d` or `90d`), `--platform`, `--account-id`, `--profile`, `--source` (`all` or `postatron`).
 X is not included, because X bills per read.
+
+### create-upload, get-upload
+
+```bash
+postatron create-upload --purpose "photo for Tuesday's post"
+postatron get-upload u_...
+```
+
+For a file that is not on the public internet.
+`create-upload` prints a link; the person opens it while signed in to Postatron and picks the file.
+Once `get-upload` reports `READY`, pass the id to `create-post --media-ids`.
 
 ## Exit codes
 
