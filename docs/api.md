@@ -57,7 +57,10 @@ Usage is metered in **destination-posts**: one post delivered to one account.
 A post sent to X, LinkedIn and Bluesky consumes three destination-posts.
 
 `destination_posts` is capped per calendar month (UTC).
-Deliveries whose text contains a link are counted as well (`link_posts`, and `x_link_posts` for X), for visibility only: they have no cap and no extra charge.
+Deliveries whose text contains a link are counted as well (`link_posts`).
+X posts with a link (`x_link_posts`) also have a monthly cap, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale, with no overage.
+At the cap, only X posts with a link are refused (`402 quota_exceeded`, `details.resource` = `x_link_posts`); plain X posts and every other platform carry on.
+Each tweet of an X thread counts as its own destination-post, and as an X link post if it has a link.
 Links are detected in the post text: `http(s)://` URLs, `www.` hosts and bare domains with a common TLD.
 
 Quota is consumed when the post is created, whether it publishes immediately or later.
@@ -258,14 +261,14 @@ Default comes first, then the rest oldest first.
   "plan": { "code": "GROWTH", "name": "Growth", "interval": "month", "status": "ACTIVE", "connected_accounts": 6, "max_connected_accounts": 15 },
   "destination_posts": { "used": 412, "limit": 1500, "remaining": 1088 },
   "link_posts": { "used": 96 },
-  "x_link_posts": { "used": 11, "limit": 0, "remaining": 0 },
+  "x_link_posts": { "used": 11, "limit": 80, "remaining": 69 },
   "by_platform": { "x": 128, "linkedin": 104, "bluesky": 71, "threads": 58, "facebook": 51 },
-  "overage": { "enabled": true, "destination_posts": 0, "x_link_posts": 0, "destination_posts_ceiling": 3000, "x_link_posts_ceiling": 0, "destination_post_unit_price_usd": 0.03, "x_link_post_unit_price_usd": 0 },
+  "overage": { "enabled": true, "destination_posts": 0, "x_link_posts": 0, "destination_posts_ceiling": 3000, "x_link_posts_ceiling": 80, "destination_post_unit_price_usd": 0.03, "x_link_post_unit_price_usd": 0 },
   "rate_limits": { "writes_per_minute": 30, "reads_per_minute": 60, "uploads_per_minute": 120, "writes_per_hour": 1800 }
 }
 ```
 
-`limit` is what the plan includes each month; `x_link_posts` is counted but uncapped, so its `limit` is 0.
+`limit` is what the plan includes each month; X link posts have no overage, so their ceiling equals their limit.
 `overage.*_ceiling` is the hard stop: the cap plus the overage allowance on monthly plans, or the cap alone on yearly plans.
 `rate_limits.writes_per_hour` is kept for older clients; use `writes_per_minute`.
 
