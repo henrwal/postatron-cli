@@ -32,9 +32,10 @@ Claude: **Settings → Connectors → Add custom connector**, URL `https://api.p
 Claude Code: the plugin connects the server and adds the Postatron skill, which teaches the agent the workflow (profiles, timezones, platform limits, confirming before publishing).
 
 ```
-/plugin marketplace add henrwal/postatron-cli
-/plugin install postatron@postatron
+/plugin install postatron --marketplace henrwal/postatron-cli
 ```
+
+Run it inside a Claude Code session (v2.1.275 or later); it asks to add the Postatron marketplace, then installs.
 
 Or connect the server alone:
 

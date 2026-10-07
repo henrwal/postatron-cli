@@ -22,9 +22,10 @@ Add it as a custom connector in Claude (Settings → Connectors → Add custom c
 Claude Code: install the plugin, which connects the server and adds the Postatron skill in one step.
 
 ```
-/plugin marketplace add henrwal/postatron-cli
-/plugin install postatron@postatron
+/plugin install postatron --marketplace henrwal/postatron-cli
 ```
+
+Run it inside a Claude Code session (v2.1.275 or later); it asks to add the Postatron marketplace, then installs.
 
 Then run `/mcp` and sign in to Postatron.
 To connect the server alone, without the skill:

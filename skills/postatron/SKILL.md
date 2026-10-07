@@ -19,7 +19,7 @@ Use the first of these that works, and stay with it for the whole task.
 If none is set up, tell the person how to connect and stop:
 
 - Claude: add a custom connector with the URL `https://api.postatron.com/mcp` and sign in.
-- Claude Code: `/plugin marketplace add henrwal/postatron-cli` then `/plugin install postatron@postatron` (or `claude mcp add --transport http postatron https://api.postatron.com/mcp`), then `/mcp` to sign in.
+- Claude Code: `/plugin install postatron --marketplace henrwal/postatron-cli` (or `claude mcp add --transport http postatron https://api.postatron.com/mcp`), then `/mcp` to sign in.
 - Terminal: create a key at https://postatron.com/dashboard/api, `export POSTATRON_API_KEY=...`, and install the CLI with `go install github.com/henrwal/postatron-cli/cmd/postatron@latest` or a binary from https://github.com/henrwal/postatron-cli/releases.
 
 Never ask for the API key in the conversation, and never print it.
