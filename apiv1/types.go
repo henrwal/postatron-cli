@@ -155,7 +155,6 @@ type UsageReport struct {
 	LinkPosts        UsageLinkCounter `json:"link_posts"`
 	XLinkPosts       UsageCounter     `json:"x_link_posts"`
 	ByPlatform       map[string]int   `json:"by_platform"`
-	Overage          UsageOverage     `json:"overage"`
 	RateLimits       UsageRateLimits  `json:"rate_limits"`
 }
 
@@ -175,8 +174,8 @@ type UsagePlan struct {
 	MaxConnectedAccounts int    `json:"max_connected_accounts"`
 }
 
-// UsageCounter is a capped counter. Limit is the amount included in the plan;
-// the hard stop including any overage allowance is reported under Overage.
+// UsageCounter is a capped counter. Limit is what the plan includes each
+// month and is also the hard stop: there is no overage on any plan.
 type UsageCounter struct {
 	Used      int `json:"used"`
 	Limit     int `json:"limit"`
@@ -186,18 +185,6 @@ type UsageCounter struct {
 // UsageLinkCounter counts link-containing destination-posts across all platforms.
 type UsageLinkCounter struct {
 	Used int `json:"used"`
-}
-
-// UsageOverage reports metered overage consumed this period and the hard
-// ceilings (plan cap plus overage allowance on monthly plans).
-type UsageOverage struct {
-	Enabled                     bool    `json:"enabled"`
-	DestinationPosts            int     `json:"destination_posts"`
-	XLinkPosts                  int     `json:"x_link_posts"`
-	DestinationPostsCeiling     int     `json:"destination_posts_ceiling"`
-	XLinkPostsCeiling           int     `json:"x_link_posts_ceiling"`
-	DestinationPostUnitPriceUSD float64 `json:"destination_post_unit_price_usd"`
-	XLinkPostUnitPriceUSD       float64 `json:"x_link_post_unit_price_usd"`
 }
 
 // UsageRateLimits echoes the per-key limits applied to this plan.

@@ -227,7 +227,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 
 	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolGetUsage,
-		Description: "Show this month's quota: destination-posts used and remaining, X link posts, posts per platform, overage and rate limits.",
+		Description: "Show this month's quota: destination-posts used and remaining, X link posts, posts per platform and rate limits.",
 	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.UsageReport, error) {
 		out, err := ops.GetUsage(ctx)
 		if err != nil {

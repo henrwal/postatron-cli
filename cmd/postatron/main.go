@@ -465,10 +465,6 @@ func printUsage(w io.Writer, r apiv1.UsageReport) {
 	}
 	fmt.Fprintf(w, "Link posts (all):  %d\n", r.LinkPosts.Used)
 	fmt.Fprintf(w, "Accounts:          %d / %d\n", r.Plan.ConnectedAccounts, r.Plan.MaxConnectedAccounts)
-	if r.Overage.Enabled {
-		fmt.Fprintf(w, "Overage:           %d destination-posts, %d X link posts (at $%.2f / $%.2f each)\n",
-			r.Overage.DestinationPosts, r.Overage.XLinkPosts, r.Overage.DestinationPostUnitPriceUSD, r.Overage.XLinkPostUnitPriceUSD)
-	}
 	writes := r.RateLimits.WritesPerMinute
 	if writes == 0 {
 		// A server older than writes_per_minute.

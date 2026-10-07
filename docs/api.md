@@ -58,7 +58,7 @@ A post sent to X, LinkedIn and Bluesky consumes three destination-posts.
 
 `destination_posts` is capped per calendar month (UTC).
 Deliveries whose text contains a link are counted as well (`link_posts`).
-X posts with a link (`x_link_posts`) also have a monthly cap, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale, with no overage.
+X posts with a link (`x_link_posts`) also have a monthly cap, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale.
 At the cap, only X posts with a link are refused (`402 quota_exceeded`, `details.resource` = `x_link_posts`); plain X posts and every other platform carry on.
 Each tweet of an X thread counts as its own destination-post, and as an X link post if it has a link.
 Links are detected in the post text: `http(s)://` URLs, `www.` hosts and bare domains with a common TLD.
@@ -67,9 +67,8 @@ Quota is consumed when the post is created, whether it publishes immediately or 
 Cancelling a scheduled post does not refund it.
 The dashboard and the API share the same counters, and `GET /v1/usage` reports them.
 
-Monthly plans can exceed the cap on metered overage, up to twice the cap.
-Yearly plans stop at the cap.
-When a request would breach the hard ceiling the API returns `402 quota_exceeded` and nothing is published:
+Every plan has a fixed price, so the caps are hard stops on monthly and yearly plans alike; nothing is ever billed on top.
+When a request would go past a cap the API returns `402 quota_exceeded` and nothing is published:
 
 ```json
 {
@@ -263,13 +262,11 @@ Default comes first, then the rest oldest first.
   "link_posts": { "used": 96 },
   "x_link_posts": { "used": 11, "limit": 80, "remaining": 69 },
   "by_platform": { "x": 128, "linkedin": 104, "bluesky": 71, "threads": 58, "facebook": 51 },
-  "overage": { "enabled": true, "destination_posts": 0, "x_link_posts": 0, "destination_posts_ceiling": 3000, "x_link_posts_ceiling": 80, "destination_post_unit_price_usd": 0.03, "x_link_post_unit_price_usd": 0 },
   "rate_limits": { "writes_per_minute": 30, "reads_per_minute": 60, "uploads_per_minute": 120, "writes_per_hour": 1800 }
 }
 ```
 
-`limit` is what the plan includes each month; X link posts have no overage, so their ceiling equals their limit.
-`overage.*_ceiling` is the hard stop: the cap plus the overage allowance on monthly plans, or the cap alone on yearly plans.
+`limit` is what the plan includes each month, and the hard stop: the counters reset on the 1st (UTC).
 `rate_limits.writes_per_hour` is kept for older clients; use `writes_per_minute`.
 
 ### GET /v1/analytics
@@ -329,4 +326,4 @@ Pass a ready id to `POST /v1/posts` in `media_ids`.
 | Growth | $39/mo or $390/yr | 1,500 | 15 | 5 |
 | Scale | $99/mo or $990/yr | 4,000 | 50 | 20 |
 
-Overage on monthly plans: $0.03 per extra destination-post, up to double the plan's cap.
+Prices are fixed: nothing is billed beyond the plan, monthly or yearly.
