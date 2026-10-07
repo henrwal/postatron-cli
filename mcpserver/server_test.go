@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,19 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		names = append(names, tool.Name)
 		assert.NotEmpty(t, tool.Description)
 		assert.NotNil(t, tool.InputSchema)
+
+		// Titles and hints match the remote server: Claude runs read-only
+		// tools without asking and always confirms a destructive one, and the
+		// Connectors Directory refuses a tool with neither.
+		require.NotNil(t, tool.Annotations, tool.Name)
+		assert.NotEmpty(t, tool.Title, tool.Name)
+		assert.Equal(t, tool.Title, tool.Annotations.Title, tool.Name)
+		isRead := strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "get_")
+		assert.Equal(t, isRead, tool.Annotations.ReadOnlyHint, tool.Name)
+		if tool.Name == "create_post" || tool.Name == "delete_post" {
+			require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
+			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes or deletes on real accounts", tool.Name)
+		}
 	}
 	assert.ElementsMatch(t, []string{
 		"create_post", "list_posts", "get_post", "delete_post", "list_accounts", "list_profiles",

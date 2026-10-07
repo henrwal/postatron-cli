@@ -92,10 +92,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		WebsiteURL: "https://postatron.com",
 	}, nil)
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolCreatePost,
 		Description: "Create a social media post. Publishes immediately unless scheduled_at is set. One post fanned out to N platforms consumes N destination-posts of the monthly quota.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CreatePostInput) (*mcp.CallToolResult, *apiv1.Post, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in CreatePostInput) (*mcp.CallToolResult, *apiv1.Post, error) {
 		req := apiv1.CreatePostRequest{
 			Content:    in.Content,
 			Platforms:  in.Platforms,
@@ -118,11 +118,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, post, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolListPosts,
 		Description: "List posts, newest first, with optional status, platform and date filters. Returns next_cursor when more pages exist.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in ListPostsInput) (*mcp.CallToolResult, *apiv1.PostList, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in ListPostsInput) (*mcp.CallToolResult, *apiv1.PostList, error) {
 		query := apiv1.ListPostsQuery{Status: in.Status, Platform: in.Platform, Profile: in.Profile, Limit: in.Limit, Cursor: in.Cursor}
 		if strings.TrimSpace(in.From) != "" {
 			from, err := time.Parse(time.RFC3339, strings.TrimSpace(in.From))
@@ -145,11 +144,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, list, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolGetPost,
 		Description: "Get one post with its per-platform delivery status, URLs and errors.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in PostIDInput) (*mcp.CallToolResult, *apiv1.Post, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in PostIDInput) (*mcp.CallToolResult, *apiv1.Post, error) {
 		post, err := ops.GetPost(ctx, strings.TrimSpace(in.ID))
 		if err != nil {
 			return handleError[*apiv1.Post](err)
@@ -157,11 +155,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, post, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolDeletePost,
 		Description: "Cancel a scheduled post. Posts that were already published are left untouched and reported as cancelled=false.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in PostIDInput) (*mcp.CallToolResult, *apiv1.DeletePostResponse, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in PostIDInput) (*mcp.CallToolResult, *apiv1.DeletePostResponse, error) {
 		out, err := ops.DeletePost(ctx, strings.TrimSpace(in.ID))
 		if err != nil {
 			return handleError[*apiv1.DeletePostResponse](err)
@@ -169,11 +166,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolListAccounts,
 		Description: "List the connected social accounts (id, platform, username, profile, status). Use the ids or platforms with create_post.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.AccountList, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.AccountList, error) {
 		out, err := ops.ListAccounts(ctx)
 		if err != nil {
 			return handleError[*apiv1.AccountList](err)
@@ -181,11 +177,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolListProfiles,
 		Description: "List profiles and the accounts in each. A profile groups accounts, usually one per brand or client, with at most one account per platform. Pass a profile to create_post to post as that brand.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.ProfileList, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.ProfileList, error) {
 		out, err := ops.ListProfiles(ctx)
 		if err != nil {
 			return handleError[*apiv1.ProfileList](err)
@@ -193,12 +188,11 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name: ToolGetAnalytics,
 		Description: "How the posts and accounts are performing over the last 7, 30 or 90 days: engagement rate, reach, followers, " +
 			"totals per platform, the best posts, and any account that needs reconnecting. Metrics a platform does not report are null. X is not included.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in AnalyticsInput) (*mcp.CallToolResult, *apiv1.AnalyticsReport, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in AnalyticsInput) (*mcp.CallToolResult, *apiv1.AnalyticsReport, error) {
 		out, err := ops.GetAnalytics(ctx, apiv1.AnalyticsQuery{
 			Range: in.Range, Platform: in.Platform, AccountID: in.AccountID, Profile: in.Profile, Source: in.Source,
 		})
@@ -208,11 +202,11 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name: ToolCreateUpload,
 		Description: "Get a link the person can use to attach a photo or video from their own device. Give them the upload_url, wait for them to say they have uploaded it, " +
 			"check with get_upload, then pass the id to create_post as media_ids. Use this whenever the file is not already on the public internet.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in CreateUploadInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in CreateUploadInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
 		out, err := ops.CreateUpload(ctx, apiv1.CreateUploadRequest{Purpose: in.Purpose})
 		if err != nil {
 			return handleError[*apiv1.Upload](err)
@@ -220,11 +214,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolGetUpload,
 		Description: "Report whether the person has uploaded their file yet: PENDING until they do, READY afterwards. Ask them to tell you when they are done rather than polling.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in UploadIDInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in UploadIDInput) (*mcp.CallToolResult, *apiv1.Upload, error) {
 		out, err := ops.GetUpload(ctx, strings.TrimSpace(in.ID))
 		if err != nil {
 			return handleError[*apiv1.Upload](err)
@@ -232,11 +225,10 @@ func New(ops apiv1.Operations) *mcp.Server {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolGetUsage,
 		Description: "Show this month's quota: destination-posts used and remaining, X link posts, posts per platform, overage and rate limits.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.UsageReport, error) {
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.UsageReport, error) {
 		out, err := ops.GetUsage(ctx)
 		if err != nil {
 			return handleError[*apiv1.UsageReport](err)
@@ -246,6 +238,35 @@ func New(ops apiv1.Operations) *mcp.Server {
 
 	return server
 }
+
+// toolNotes gives every tool the same title and hints as the remote server
+// (cmd/api/v1/mcp.go in the backend), so a client treats each tool alike
+// whichever server it came from. Claude runs read-only tools without asking
+// and always confirms a destructive one; publishing to someone's real
+// accounts counts as destructive.
+var toolNotes = map[string]mcp.ToolAnnotations{
+	ToolListAccounts: {Title: "List connected accounts", ReadOnlyHint: true, IdempotentHint: true},
+	ToolListProfiles: {Title: "List profiles", ReadOnlyHint: true, IdempotentHint: true},
+	ToolCreatePost:   {Title: "Create or schedule a post", DestructiveHint: boolPtr(true)},
+	ToolListPosts:    {Title: "List posts", ReadOnlyHint: true, IdempotentHint: true},
+	ToolGetPost:      {Title: "Get one post", ReadOnlyHint: true, IdempotentHint: true},
+	ToolDeletePost:   {Title: "Cancel a scheduled post", DestructiveHint: boolPtr(true), IdempotentHint: true},
+	ToolCreateUpload: {Title: "Ask the person to attach a file", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
+	ToolGetUpload:    {Title: "Check whether a file has been attached", ReadOnlyHint: true, IdempotentHint: true},
+	ToolGetAnalytics: {Title: "Get post analytics", ReadOnlyHint: true, IdempotentHint: true},
+	ToolGetUsage:     {Title: "Get plan usage", ReadOnlyHint: true, IdempotentHint: true},
+}
+
+// describe adds the tool's title and hints from toolNotes.
+func describe(tool *mcp.Tool) *mcp.Tool {
+	if notes, ok := toolNotes[tool.Name]; ok {
+		tool.Title = notes.Title
+		tool.Annotations = &notes
+	}
+	return tool
+}
+
+func boolPtr(v bool) *bool { return &v }
 
 // handleError renders API errors with their code, retry hint and details.
 // The SDK turns any returned error into an isError tool result, so the model
