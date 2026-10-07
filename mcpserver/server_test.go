@@ -17,6 +17,8 @@ import (
 )
 
 type fakeOps struct {
+	updated  []apiv1.UpdatePostRequest
+	connects []apiv1.ConnectAccountRequest
 	created  []apiv1.CreatePostRequest
 	listed   []apiv1.ListPostsQuery
 	deleted  []string
@@ -41,6 +43,16 @@ func (f *fakeOps) GetPost(_ context.Context, id string) (*apiv1.Post, error) {
 		return nil, &apiv1.APIError{Status: http.StatusNotFound, Code: apiv1.CodeNotFound, Message: "post not found"}
 	}
 	return &apiv1.Post{ID: id, Deliveries: []apiv1.Delivery{}}, nil
+}
+
+func (f *fakeOps) UpdatePost(_ context.Context, id string, req apiv1.UpdatePostRequest) (*apiv1.Post, error) {
+	f.updated = append(f.updated, req)
+	return &apiv1.Post{ID: id, Status: "scheduled", Deliveries: []apiv1.Delivery{{Platform: "instagram", Username: "henry", Status: "pending"}}}, nil
+}
+
+func (f *fakeOps) ConnectAccount(_ context.Context, req apiv1.ConnectAccountRequest) (*apiv1.ConnectLink, error) {
+	f.connects = append(f.connects, req)
+	return &apiv1.ConnectLink{Platform: req.Platform, ConnectURL: "https://postatron.com/dashboard/socials?connect=" + req.Platform, Hint: "Open the link to connect."}, nil
 }
 
 func (f *fakeOps) DeletePost(_ context.Context, id string) (*apiv1.DeletePostResponse, error) {
@@ -116,13 +128,13 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		assert.Equal(t, tool.Title, tool.Annotations.Title, tool.Name)
 		isRead := strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "get_")
 		assert.Equal(t, isRead, tool.Annotations.ReadOnlyHint, tool.Name)
-		if tool.Name == "create_post" || tool.Name == "delete_post" {
+		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "update_post" {
 			require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
 			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes or deletes on real accounts", tool.Name)
 		}
 	}
 	assert.ElementsMatch(t, []string{
-		"create_post", "list_posts", "get_post", "delete_post", "list_accounts", "list_profiles",
+		"create_post", "list_posts", "get_post", "delete_post", "update_post", "connect_account", "list_accounts", "list_profiles",
 		"get_usage", "get_analytics", "create_upload", "get_upload",
 	}, names)
 }

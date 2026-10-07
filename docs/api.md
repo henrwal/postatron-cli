@@ -217,6 +217,44 @@ Posts that are pending, processing or already published are left alone and repor
 { "id": "...", "status": "published", "cancelled": false, "message": "post has already been published; nothing to cancel" }
 ```
 
+### PATCH /v1/posts/{id}
+
+Changes a scheduled post.
+Every field is optional; what is left out keeps its value.
+
+```json
+{
+  "content": "We're live",
+  "scheduled_at": "2026-10-08T09:00:00+01:00",
+  "add_platforms": ["instagram"],
+  "add_account_ids": ["1234567890"],
+  "remove_account_ids": ["9876543210"],
+  "profile": "Acme"
+}
+```
+
+`add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
+Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
+The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
+Only `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
+Returns the updated post.
+
+### POST /v1/accounts/connect
+
+Returns a link that connects one of your social accounts.
+
+```json
+{ "platform": "x", "profile": "Acme" }
+```
+
+```json
+{ "platform": "x", "connect_url": "https://postatron.com/dashboard/socials?connect=x&profile=...", "profile": "acme", "hint": "Open the link..." }
+```
+
+The link opens Postatron and starts that platform's sign-in; nothing is connected until the person finishes it there.
+It only works for the Postatron account that asked for it: signed in as someone else, the page refuses it.
+A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link.
+
 ### GET /v1/accounts
 
 ```json

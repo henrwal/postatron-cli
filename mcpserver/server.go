@@ -22,16 +22,18 @@ var Version = "1.0.0"
 
 // Tool names, kept identical to the CLI commands (with underscores).
 const (
-	ToolCreatePost   = "create_post"
-	ToolListPosts    = "list_posts"
-	ToolGetPost      = "get_post"
-	ToolDeletePost   = "delete_post"
-	ToolListAccounts = "list_accounts"
-	ToolListProfiles = "list_profiles"
-	ToolGetUsage     = "get_usage"
-	ToolGetAnalytics = "get_analytics"
-	ToolCreateUpload = "create_upload"
-	ToolGetUpload    = "get_upload"
+	ToolCreatePost     = "create_post"
+	ToolListPosts      = "list_posts"
+	ToolGetPost        = "get_post"
+	ToolDeletePost     = "delete_post"
+	ToolUpdatePost     = "update_post"
+	ToolConnectAccount = "connect_account"
+	ToolListAccounts   = "list_accounts"
+	ToolListProfiles   = "list_profiles"
+	ToolGetUsage       = "get_usage"
+	ToolGetAnalytics   = "get_analytics"
+	ToolCreateUpload   = "create_upload"
+	ToolGetUpload      = "get_upload"
 )
 
 // CreatePostInput is the create_post tool input.
@@ -43,6 +45,23 @@ type CreatePostInput struct {
 	MediaURLs   []string `json:"media_urls,omitempty" jsonschema:"Public https URLs of images or a video to attach (up to 4). Instagram and TikTok need one; YouTube needs a video."`
 	MediaIDs    []string `json:"media_ids,omitempty" jsonschema:"Upload ids from create_upload, for files on the person's own device."`
 	ScheduledAt string   `json:"scheduled_at,omitempty" jsonschema:"RFC 3339 timestamp (UTC) to schedule the post, at least 5 minutes ahead, e.g. 2026-09-10T09:00:00Z. Omit to publish now."`
+}
+
+// UpdatePostInput is the update_post tool input.
+type UpdatePostInput struct {
+	PostID           string   `json:"post_id" jsonschema:"The id of a scheduled post, from create_post or list_posts."`
+	Content          string   `json:"content,omitempty" jsonschema:"New text for the post. Omit to keep it."`
+	ScheduledAt      string   `json:"scheduled_at,omitempty" jsonschema:"New RFC 3339 time, at least 5 minutes ahead. Omit to keep it."`
+	AddPlatforms     []string `json:"add_platforms,omitempty" jsonschema:"Platforms to add, e.g. [\"instagram\"]: the account on each in profile. Instagram and TikTok need the post to have an image or a video."`
+	AddAccountIDs    []string `json:"add_account_ids,omitempty" jsonschema:"Specific connected account ids to add, from list_accounts."`
+	RemoveAccountIDs []string `json:"remove_account_ids,omitempty" jsonschema:"Account ids to take off the post. At least one must remain."`
+	Profile          string   `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles, saying which brand add_platforms means."`
+}
+
+// ConnectAccountInput is the connect_account tool input.
+type ConnectAccountInput struct {
+	Platform string `json:"platform" jsonschema:"The network to connect: x, instagram, facebook, linkedin, tiktok, youtube, threads or bluesky."`
+	Profile  string `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles to put the account in. Omit for the Default profile."`
 }
 
 // ListPostsInput is the list_posts tool input.
@@ -167,6 +186,46 @@ func New(ops apiv1.Operations) *mcp.Server {
 	})
 
 	mcp.AddTool(server, describe(&mcp.Tool{
+		Name: ToolUpdatePost,
+		Description: "Change a scheduled post: its text, its time, or the accounts it goes to (add_platforms to add, e.g. Instagram, remove_account_ids to drop one). " +
+			"Use this rather than a second create_post when the person adds to a post they already scheduled. Accounts added count against the monthly quota like a new post.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in UpdatePostInput) (*mcp.CallToolResult, *apiv1.Post, error) {
+		req := apiv1.UpdatePostRequest{
+			AddPlatforms:     in.AddPlatforms,
+			AddAccountIDs:    in.AddAccountIDs,
+			RemoveAccountIDs: in.RemoveAccountIDs,
+			Profile:          in.Profile,
+		}
+		if content := strings.TrimSpace(in.Content); content != "" {
+			req.Content = &content
+		}
+		if strings.TrimSpace(in.ScheduledAt) != "" {
+			when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
+			if err != nil {
+				return nil, nil, fmt.Errorf("scheduled_at must be RFC 3339, e.g. 2026-09-10T09:00:00Z (got %q)", in.ScheduledAt)
+			}
+			req.ScheduledAt = &when
+		}
+		post, err := ops.UpdatePost(ctx, strings.TrimSpace(in.PostID), req)
+		if err != nil {
+			return handleError[*apiv1.Post](err)
+		}
+		return nil, post, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
+		Name: ToolConnectAccount,
+		Description: "Get a link that connects one of the person's social accounts to Postatron. Give them the connect_url: it opens Postatron and starts that platform's sign-in. " +
+			"Nothing is connected until they finish there, so wait for them to say it is done, then call list_accounts.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in ConnectAccountInput) (*mcp.CallToolResult, *apiv1.ConnectLink, error) {
+		out, err := ops.ConnectAccount(ctx, apiv1.ConnectAccountRequest{Platform: strings.TrimSpace(in.Platform), Profile: strings.TrimSpace(in.Profile)})
+		if err != nil {
+			return handleError[*apiv1.ConnectLink](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name:        ToolListAccounts,
 		Description: "List the connected social accounts (id, platform, username, profile, status). Use the ids or platforms with create_post.",
 	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.AccountList, error) {
@@ -251,10 +310,13 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolListPosts:    {Title: "List posts", ReadOnlyHint: true, IdempotentHint: true},
 	ToolGetPost:      {Title: "Get one post", ReadOnlyHint: true, IdempotentHint: true},
 	ToolDeletePost:   {Title: "Cancel a scheduled post", DestructiveHint: boolPtr(true), IdempotentHint: true},
-	ToolCreateUpload: {Title: "Ask the person to attach a file", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
-	ToolGetUpload:    {Title: "Check whether a file has been attached", ReadOnlyHint: true, IdempotentHint: true},
-	ToolGetAnalytics: {Title: "Get post analytics", ReadOnlyHint: true, IdempotentHint: true},
-	ToolGetUsage:     {Title: "Get plan usage", ReadOnlyHint: true, IdempotentHint: true},
+	ToolUpdatePost:   {Title: "Change a scheduled post", DestructiveHint: boolPtr(true)},
+	// A link only; nothing changes until the person finishes signing in.
+	ToolConnectAccount: {Title: "Connect a social account", DestructiveHint: boolPtr(false)},
+	ToolCreateUpload:   {Title: "Ask the person to attach a file", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
+	ToolGetUpload:      {Title: "Check whether a file has been attached", ReadOnlyHint: true, IdempotentHint: true},
+	ToolGetAnalytics:   {Title: "Get post analytics", ReadOnlyHint: true, IdempotentHint: true},
+	ToolGetUsage:       {Title: "Get plan usage", ReadOnlyHint: true, IdempotentHint: true},
 }
 
 // describe adds the tool's title and hints from toolNotes.

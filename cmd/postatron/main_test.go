@@ -13,6 +13,8 @@ import (
 )
 
 type fakeOps struct {
+	updated  []apiv1.UpdatePostRequest
+	connects []apiv1.ConnectAccountRequest
 	created  []apiv1.CreatePostRequest
 	listed   []apiv1.ListPostsQuery
 	deleted  []string
@@ -34,6 +36,16 @@ func (f *fakeOps) ListPosts(_ context.Context, q apiv1.ListPostsQuery) (*apiv1.P
 
 func (f *fakeOps) GetPost(_ context.Context, id string) (*apiv1.Post, error) {
 	return &apiv1.Post{ID: id, Status: "failed", Content: "x", CreatedAt: time.Unix(0, 0), Deliveries: []apiv1.Delivery{{Platform: "linkedin", Username: "h", Status: "failed", Error: "token expired"}}}, nil
+}
+
+func (f *fakeOps) UpdatePost(_ context.Context, id string, req apiv1.UpdatePostRequest) (*apiv1.Post, error) {
+	f.updated = append(f.updated, req)
+	return &apiv1.Post{ID: id, Status: "scheduled", Deliveries: []apiv1.Delivery{{Platform: "instagram", Username: "henry", Status: "pending"}}}, nil
+}
+
+func (f *fakeOps) ConnectAccount(_ context.Context, req apiv1.ConnectAccountRequest) (*apiv1.ConnectLink, error) {
+	f.connects = append(f.connects, req)
+	return &apiv1.ConnectLink{Platform: req.Platform, ConnectURL: "https://postatron.com/dashboard/socials?connect=" + req.Platform, Hint: "Open the link to connect."}, nil
 }
 
 func (f *fakeOps) DeletePost(_ context.Context, id string) (*apiv1.DeletePostResponse, error) {
@@ -124,8 +136,33 @@ func TestCommands(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "get-usage", "get-analytics",
-		"create-upload", "get-upload",
+		"create-upload", "get-upload", "update-post", "connect-account",
 	}, names)
+}
+
+func TestUpdatePost(t *testing.T) {
+	ops := &fakeOps{}
+	_, err := run(t, ops, "update-post", "p_1", "--add-platforms", "instagram", "--profile", "Acme")
+	require.NoError(t, err)
+	require.Len(t, ops.updated, 1)
+	assert.Equal(t, []string{"instagram"}, ops.updated[0].AddPlatforms)
+	assert.Equal(t, "Acme", ops.updated[0].Profile)
+	assert.Nil(t, ops.updated[0].Content, "text left alone unless --content is given")
+
+	_, err = run(t, ops, "update-post", "p_1", "--content", "")
+	require.NoError(t, err)
+	require.NotNil(t, ops.updated[1].Content, "an explicit --content is sent even when empty, so the API can refuse it")
+
+	_, err = run(t, ops, "update-post", "p_1", "--scheduled-at", "soon")
+	require.Error(t, err)
+}
+
+func TestConnectAccount(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "connect-account", "x")
+	require.NoError(t, err)
+	assert.Contains(t, out, "https://postatron.com/dashboard/socials?connect=x")
+	assert.Equal(t, "x", ops.connects[0].Platform)
 }
 
 func TestCreatePost(t *testing.T) {

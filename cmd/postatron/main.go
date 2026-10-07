@@ -77,7 +77,9 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newListPostsCommand(g),
 		newGetPostCommand(g),
 		newDeletePostCommand(g),
+		newUpdatePostCommand(g),
 		newListAccountsCommand(g),
+		newConnectAccountCommand(g),
 		newListProfilesCommand(g),
 		newGetUsageCommand(g),
 		newGetAnalyticsCommand(g),
@@ -229,6 +231,77 @@ func newDeletePostCommand(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newUpdatePostCommand(g *globals) *cobra.Command {
+	var (
+		content, scheduledAt, profile         string
+		addPlatforms, addAccounts, removeAccs []string
+	)
+	cmd := &cobra.Command{
+		Use:   "update-post <id>",
+		Short: "Change a scheduled post: text, time, or the accounts it goes to",
+		Example: `  postatron update-post p_123 --add-platforms instagram
+  postatron update-post p_123 --scheduled-at 2026-09-10T10:00:00Z
+  postatron update-post p_123 --content "New wording" --remove-account-ids 1234567890`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile}
+			if cmd.Flags().Changed("content") {
+				req.Content = &content
+			}
+			if scheduledAt != "" {
+				when, err := time.Parse(time.RFC3339, scheduledAt)
+				if err != nil {
+					return usageError("--scheduled-at must be RFC 3339, e.g. 2026-09-10T09:00:00Z")
+				}
+				req.ScheduledAt = &when
+			}
+			post, err := g.ops().UpdatePost(cmd.Context(), args[0], req)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, post)
+			}
+			printPost(g.out, *post)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&content, "content", "c", "", "new post text")
+	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "new RFC 3339 time, at least 5 minutes ahead")
+	cmd.Flags().StringSliceVar(&addPlatforms, "add-platforms", nil, "platforms to add, e.g. instagram (the account on each, in --profile)")
+	cmd.Flags().StringSliceVar(&addAccounts, "add-account-ids", nil, "specific account ids to add")
+	cmd.Flags().StringSliceVar(&removeAccs, "remove-account-ids", nil, "account ids to take off the post")
+	cmd.Flags().StringVar(&profile, "profile", "", "profile name or id that --add-platforms means")
+	return cmd
+}
+
+func newConnectAccountCommand(g *globals) *cobra.Command {
+	var profile string
+	cmd := &cobra.Command{
+		Use:   "connect-account <platform>",
+		Short: "Get a link that connects a social account (x, instagram, linkedin, ...)",
+		Example: `  postatron connect-account x
+  postatron connect-account instagram --profile Acme`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			link, err := g.ops().ConnectAccount(cmd.Context(), apiv1.ConnectAccountRequest{Platform: args[0], Profile: profile})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, link)
+			}
+			fmt.Fprintf(g.out, "Open this link to connect %s:\n%s\n", link.Platform, link.ConnectURL)
+			if link.Hint != "" {
+				fmt.Fprintln(g.out, link.Hint)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&profile, "profile", "", "profile name or id to put the account in")
+	return cmd
 }
 
 func newListAccountsCommand(g *globals) *cobra.Command {

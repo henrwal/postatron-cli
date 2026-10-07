@@ -65,6 +65,44 @@ type CreatePostRequest struct {
 	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
 }
 
+// UpdatePostRequest is the body of PATCH /v1/posts/{id}. Every field is
+// optional and anything left out keeps its value. Only a scheduled post can
+// change; once it has started publishing it is fixed.
+type UpdatePostRequest struct {
+	// Content replaces the post's text.
+	Content *string `json:"content,omitempty"`
+	// ScheduledAt moves the post, at least 5 minutes ahead.
+	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
+	// AddPlatforms adds the account on each platform (in Profile), the way
+	// CreatePostRequest.Platforms chooses them.
+	AddPlatforms []string `json:"add_platforms,omitempty"`
+	// AddAccountIDs adds specific connected accounts.
+	AddAccountIDs []string `json:"add_account_ids,omitempty"`
+	// RemoveAccountIDs takes accounts off the post; at least one must remain.
+	RemoveAccountIDs []string `json:"remove_account_ids,omitempty"`
+	// Profile chooses which brand AddPlatforms means.
+	Profile string `json:"profile,omitempty"`
+}
+
+// ConnectAccountRequest is the body of POST /v1/accounts/connect.
+type ConnectAccountRequest struct {
+	// Platform is the network to connect: x, instagram, facebook, linkedin,
+	// tiktok, youtube, threads or bluesky.
+	Platform string `json:"platform"`
+	// Profile is the profile (name or id) the new account goes into.
+	Profile string `json:"profile,omitempty"`
+}
+
+// ConnectLink is a link the person opens to connect a social account. It
+// opens Postatron and starts that platform's sign-in; nothing is connected
+// until they finish it there.
+type ConnectLink struct {
+	Platform   string `json:"platform"`
+	ConnectURL string `json:"connect_url"`
+	Profile    string `json:"profile,omitempty"`
+	Hint       string `json:"hint"`
+}
+
 // Delivery is the per-platform state of a post.
 type Delivery struct {
 	AccountID string `json:"account_id"`
@@ -308,8 +346,10 @@ type Operations interface {
 	CreatePost(ctx context.Context, req CreatePostRequest) (*Post, error)
 	ListPosts(ctx context.Context, query ListPostsQuery) (*PostList, error)
 	GetPost(ctx context.Context, id string) (*Post, error)
+	UpdatePost(ctx context.Context, id string, req UpdatePostRequest) (*Post, error)
 	DeletePost(ctx context.Context, id string) (*DeletePostResponse, error)
 	ListAccounts(ctx context.Context) (*AccountList, error)
+	ConnectAccount(ctx context.Context, req ConnectAccountRequest) (*ConnectLink, error)
 	ListProfiles(ctx context.Context) (*ProfileList, error)
 	GetUsage(ctx context.Context) (*UsageReport, error)
 	GetAnalytics(ctx context.Context, query AnalyticsQuery) (*AnalyticsReport, error)

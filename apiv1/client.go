@@ -89,6 +89,24 @@ func (c *Client) GetPost(ctx context.Context, id string) (*Post, error) {
 	return &out, nil
 }
 
+// UpdatePost calls PATCH /v1/posts/{id}.
+func (c *Client) UpdatePost(ctx context.Context, id string, req UpdatePostRequest) (*Post, error) {
+	var out Post
+	if err := c.do(ctx, http.MethodPatch, "/v1/posts/"+url.PathEscape(id), nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ConnectAccount calls POST /v1/accounts/connect.
+func (c *Client) ConnectAccount(ctx context.Context, req ConnectAccountRequest) (*ConnectLink, error) {
+	var out ConnectLink
+	if err := c.do(ctx, http.MethodPost, "/v1/accounts/connect", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DeletePost calls DELETE /v1/posts/{id}.
 func (c *Client) DeletePost(ctx context.Context, id string) (*DeletePostResponse, error) {
 	var out DeletePostResponse

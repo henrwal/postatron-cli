@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "postatron",
   "displayName": "Postatron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Schedule, publish and manage social media posts on X, Instagram, LinkedIn, TikTok, Facebook, Threads, Bluesky and YouTube, and see how they performed. Connects Postatron's remote MCP server and adds the Postatron skill.",
   "author": {
     "name": "Postatron",
@@ -11,7 +11,17 @@
   "homepage": "https://github.com/henrwal/postatron-cli/blob/main/docs/mcp.md",
   "repository": "https://github.com/henrwal/postatron-cli",
   "license": "MIT",
-  "keywords": ["social media", "scheduling", "publishing", "x", "instagram", "linkedin", "tiktok", "bluesky", "mcp"],
+  "keywords": [
+    "social media",
+    "scheduling",
+    "publishing",
+    "x",
+    "instagram",
+    "linkedin",
+    "tiktok",
+    "bluesky",
+    "mcp"
+  ],
   "icon": "./assets/postatron-icon.png",
   "documentationUrl": "https://github.com/henrwal/postatron-cli/blob/main/docs/mcp.md",
   "supportUrl": "https://github.com/henrwal/postatron-cli/issues",
