@@ -25,7 +25,8 @@ Claude Code: install the plugin, which connects the server and adds the Postatro
 /plugin install postatron --marketplace henrwal/postatron-cli
 ```
 
-Run it inside a Claude Code session (v2.1.275 or later); it asks to add the Postatron marketplace, then installs.
+Run it inside Claude Code in a terminal (v2.1.275 or later); it asks to add the Postatron marketplace, then installs.
+The Claude desktop app has no `/plugin` command: there, add the connector URL above instead.
 
 Then run `/mcp` and sign in to Postatron.
 To connect the server alone, without the skill:
