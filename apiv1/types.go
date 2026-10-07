@@ -12,6 +12,9 @@ import (
 // Post statuses as exposed by the API (lower case, "published" instead of the
 // internal SUCCESS).
 const (
+	// StatusDraft is a post saved without a time; it goes nowhere until it is
+	// scheduled or published with PATCH /v1/posts/{id}.
+	StatusDraft      = "draft"
 	StatusScheduled  = "scheduled"
 	StatusPending    = "pending"
 	StatusProcessing = "processing"
@@ -66,13 +69,17 @@ type CreatePostRequest struct {
 }
 
 // UpdatePostRequest is the body of PATCH /v1/posts/{id}. Every field is
-// optional and anything left out keeps its value. Only a scheduled post can
-// change; once it has started publishing it is fixed.
+// optional and anything left out keeps its value. A draft or a scheduled post
+// can change; once it has started publishing it is fixed. A draft stays a
+// draft unless ScheduledAt or PublishNow says when it goes out.
 type UpdatePostRequest struct {
 	// Content replaces the post's text.
 	Content *string `json:"content,omitempty"`
-	// ScheduledAt moves the post, at least 5 minutes ahead.
+	// ScheduledAt moves the post, or schedules a draft, at least 5 minutes ahead.
 	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
+	// PublishNow publishes the post straight away, after any other change in
+	// the same request. It cannot be combined with ScheduledAt.
+	PublishNow bool `json:"publish_now,omitempty"`
 	// AddPlatforms adds the account on each platform (in Profile), the way
 	// CreatePostRequest.Platforms chooses them.
 	AddPlatforms []string `json:"add_platforms,omitempty"`

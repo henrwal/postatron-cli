@@ -49,9 +49,10 @@ type CreatePostInput struct {
 
 // UpdatePostInput is the update_post tool input.
 type UpdatePostInput struct {
-	PostID           string   `json:"post_id" jsonschema:"The id of a scheduled post, from create_post or list_posts."`
+	PostID           string   `json:"post_id" jsonschema:"The id of a draft or scheduled post, from create_post or list_posts."`
 	Content          string   `json:"content,omitempty" jsonschema:"New text for the post. Omit to keep it."`
-	ScheduledAt      string   `json:"scheduled_at,omitempty" jsonschema:"New RFC 3339 time, at least 5 minutes ahead. Omit to keep it."`
+	ScheduledAt      string   `json:"scheduled_at,omitempty" jsonschema:"New RFC 3339 time, at least 5 minutes ahead; on a draft, this schedules it. Omit to keep it."`
+	PublishNow       bool     `json:"publish_now,omitempty" jsonschema:"Publish the post now, after the other changes. Not with scheduled_at."`
 	AddPlatforms     []string `json:"add_platforms,omitempty" jsonschema:"Platforms to add, e.g. [\"instagram\"]: the account on each in profile. Instagram and TikTok need the post to have an image or a video."`
 	AddAccountIDs    []string `json:"add_account_ids,omitempty" jsonschema:"Specific connected account ids to add, from list_accounts."`
 	RemoveAccountIDs []string `json:"remove_account_ids,omitempty" jsonschema:"Account ids to take off the post. At least one must remain."`
@@ -66,7 +67,7 @@ type ConnectAccountInput struct {
 
 // ListPostsInput is the list_posts tool input.
 type ListPostsInput struct {
-	Status   string `json:"status,omitempty" jsonschema:"Filter by status: scheduled, pending, processing, published, failed or partial."`
+	Status   string `json:"status,omitempty" jsonschema:"Filter by status: draft, scheduled, pending, processing, published, failed or partial."`
 	Platform string `json:"platform,omitempty" jsonschema:"Only posts that target this platform, e.g. x or linkedin."`
 	Profile  string `json:"profile,omitempty" jsonschema:"Only posts to accounts in this profile (a name or id from list_profiles)."`
 	From     string `json:"from,omitempty" jsonschema:"RFC 3339 start of the date range (scheduled_at for scheduled posts, created_at otherwise)."`
@@ -187,14 +188,16 @@ func New(ops apiv1.Operations) *mcp.Server {
 
 	mcp.AddTool(server, describe(&mcp.Tool{
 		Name: ToolUpdatePost,
-		Description: "Change a scheduled post: its text, its time, or the accounts it goes to (add_platforms to add, e.g. Instagram, remove_account_ids to drop one). " +
-			"Use this rather than a second create_post when the person adds to a post they already scheduled. Accounts added count against the monthly quota like a new post.",
+		Description: "Change a draft or scheduled post: its text, its time, or the accounts it goes to (add_platforms to add, e.g. Instagram, remove_account_ids to drop one). " +
+			"Use this rather than a second create_post when the person adds to a post they already have. A draft (list_posts with status draft) goes out with scheduled_at or publish_now; otherwise it stays a draft. " +
+			"publish_now posts to the person's real accounts at once, so confirm first. Accounts added count against the monthly quota like a new post.",
 	}), func(ctx context.Context, _ *mcp.CallToolRequest, in UpdatePostInput) (*mcp.CallToolResult, *apiv1.Post, error) {
 		req := apiv1.UpdatePostRequest{
 			AddPlatforms:     in.AddPlatforms,
 			AddAccountIDs:    in.AddAccountIDs,
 			RemoveAccountIDs: in.RemoveAccountIDs,
 			Profile:          in.Profile,
+			PublishNow:       in.PublishNow,
 		}
 		if content := strings.TrimSpace(in.Content); content != "" {
 			req.Content = &content
@@ -310,7 +313,7 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolListPosts:    {Title: "List posts", ReadOnlyHint: true, IdempotentHint: true},
 	ToolGetPost:      {Title: "Get one post", ReadOnlyHint: true, IdempotentHint: true},
 	ToolDeletePost:   {Title: "Cancel a scheduled post", DestructiveHint: boolPtr(true), IdempotentHint: true},
-	ToolUpdatePost:   {Title: "Change a scheduled post", DestructiveHint: boolPtr(true)},
+	ToolUpdatePost:   {Title: "Change, schedule or publish a post", DestructiveHint: boolPtr(true)},
 	// A link only; nothing changes until the person finishes signing in.
 	ToolConnectAccount: {Title: "Connect a social account", DestructiveHint: boolPtr(false)},
 	ToolCreateUpload:   {Title: "Ask the person to attach a file", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},

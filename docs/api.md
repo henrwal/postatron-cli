@@ -189,7 +189,7 @@ Query parameters, all optional:
 
 | Parameter | Values |
 | --- | --- |
-| `status` | `scheduled`, `pending`, `processing`, `published`, `failed`, `partial` |
+| `status` | `draft`, `scheduled`, `pending`, `processing`, `published`, `failed`, `partial` |
 | `platform` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube` |
 | `profile` | A profile id or name: only posts to its accounts |
 | `from`, `to` | RFC 3339; applies to `scheduled_at` for scheduled posts and `created_at` otherwise |
@@ -219,7 +219,7 @@ Posts that are pending, processing or already published are left alone and repor
 
 ### PATCH /v1/posts/{id}
 
-Changes a scheduled post.
+Changes a draft or a scheduled post, and schedules or publishes a draft.
 Every field is optional; what is left out keeps its value.
 
 ```json
@@ -229,14 +229,18 @@ Every field is optional; what is left out keeps its value.
   "add_platforms": ["instagram"],
   "add_account_ids": ["1234567890"],
   "remove_account_ids": ["9876543210"],
-  "profile": "Acme"
+  "profile": "Acme",
+  "publish_now": false
 }
 ```
 
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
 Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
 The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
-Only `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
+Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
+A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
+`publish_now: true` publishes straight away after the other changes, for a draft or a scheduled post, and cannot be combined with `scheduled_at`; the post comes back `processing`.
+A draft was counted against the quota when it was saved, so scheduling or publishing it costs nothing more unless the same request adds accounts.
 Returns the updated post.
 
 ### POST /v1/accounts/connect

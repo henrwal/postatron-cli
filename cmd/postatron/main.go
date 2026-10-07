@@ -181,7 +181,7 @@ func newListPostsCommand(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&status, "status", "", "scheduled, pending, processing, published, failed or partial")
+	cmd.Flags().StringVar(&status, "status", "", "draft, scheduled, pending, processing, published, failed or partial")
 	cmd.Flags().StringVar(&platform, "platform", "", "only posts targeting this platform")
 	cmd.Flags().StringVar(&profile, "profile", "", "only posts to accounts in this profile (name or id)")
 	cmd.Flags().StringVar(&from, "from", "", "RFC 3339 start of range")
@@ -237,16 +237,21 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 	var (
 		content, scheduledAt, profile         string
 		addPlatforms, addAccounts, removeAccs []string
+		publishNow                            bool
 	)
 	cmd := &cobra.Command{
 		Use:   "update-post <id>",
-		Short: "Change a scheduled post: text, time, or the accounts it goes to",
+		Short: "Change a draft or scheduled post, or schedule or publish a draft",
 		Example: `  postatron update-post p_123 --add-platforms instagram
   postatron update-post p_123 --scheduled-at 2026-09-10T10:00:00Z
+  postatron update-post p_456 --add-platforms linkedin --publish-now
   postatron update-post p_123 --content "New wording" --remove-account-ids 1234567890`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile}
+			if publishNow && scheduledAt != "" {
+				return usageError("--publish-now and --scheduled-at cannot be used together")
+			}
+			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile, PublishNow: publishNow}
 			if cmd.Flags().Changed("content") {
 				req.Content = &content
 			}
@@ -269,7 +274,8 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&content, "content", "c", "", "new post text")
-	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "new RFC 3339 time, at least 5 minutes ahead")
+	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "new RFC 3339 time, at least 5 minutes ahead (schedules a draft)")
+	cmd.Flags().BoolVar(&publishNow, "publish-now", false, "publish the post now, after the other changes")
 	cmd.Flags().StringSliceVar(&addPlatforms, "add-platforms", nil, "platforms to add, e.g. instagram (the account on each, in --profile)")
 	cmd.Flags().StringSliceVar(&addAccounts, "add-account-ids", nil, "specific account ids to add")
 	cmd.Flags().StringSliceVar(&removeAccs, "remove-account-ids", nil, "account ids to take off the post")

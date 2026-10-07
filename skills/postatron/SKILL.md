@@ -91,7 +91,9 @@ When one text is too long for one platform, say which and offer a shorter versio
 | What is connected | `list_profiles`, `list_accounts` | `list-profiles`, `list-accounts` |
 | What is scheduled | `list_posts` with `status: scheduled` | `list-posts --status scheduled` |
 | Did it go out | `get_post` | `get-post <id>` |
-| Change a scheduled post (text, time, add or drop accounts) | `update_post` | `update-post <id>` |
+| Change a draft or scheduled post (text, time, add or drop accounts) | `update_post` | `update-post <id>` |
+| Their drafts | `list_posts` with `status: draft` | `list-posts --status draft` |
+| Send a draft out | `update_post` with `publish_now: true` or `scheduled_at` | `update-post <id> --publish-now` |
 | Cancel a scheduled post | `delete_post` | `delete-post <id>` |
 | Connect a social account | `connect_account` | `connect-account <platform>` |
 | How posts are doing | `get_analytics` (`range` 7d, 30d or 90d; optional `profile`, `platform`) | `get-analytics` |
@@ -99,6 +101,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 
 - A post's `deliveries` hold one entry per account: `published` with a `url`, or `failed` with an `error`. Report failures account by account; a post can be `partial`.
 - When the person adds to a post they already scheduled ("put it on Instagram too"), use `update_post` with `add_platforms`, not a second `create_post`: it stays one post, edited and cancelled as one.
+- "Submit my draft to LinkedIn": find it with `list_posts` and `status: draft`, then `update_post` with `add_platforms: ["linkedin"]` and `publish_now: true` (or `scheduled_at` for later). If more than one draft could be the one, show them and ask. Confirm before publishing now: it goes to their real account.
 - When a platform they ask for is not connected, call `connect_account` and give them the `connect_url`. Nothing is connected until they finish signing in there, so wait for them to say so, then check with `list_accounts`.
 - `delete_post` only cancels posts that are still scheduled. Once published, it reports `cancelled: false`, and the post has to be removed on the platform itself.
 - Analytics has no X numbers: X charges per read, so Postatron does not fetch them. A metric a platform does not report is `null`; say "not reported", not zero.

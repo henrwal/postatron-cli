@@ -11,7 +11,7 @@ There are two ways to connect, with the same tools:
 | `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
 | `get_post` | `GET /v1/posts/{id}` | post id |
-| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile` |
+| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now` |
 | `delete_post` | `DELETE /v1/posts/{id}` | post id |
 | `list_accounts` | `GET /v1/accounts` | none |
 | `connect_account` | `POST /v1/accounts/connect` | `platform` (required), `profile` |

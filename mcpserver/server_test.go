@@ -251,3 +251,18 @@ func TestReadToolsAndErrors(t *testing.T) {
 	_, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_post", Arguments: map[string]any{}})
 	require.Error(t, err, "missing required id fails schema validation")
 }
+
+func TestUpdatePostPublishesADraft(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "update_post", Arguments: map[string]any{
+		"post_id": "draft_1", "add_platforms": []any{"linkedin"}, "publish_now": true,
+	}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	require.Len(t, ops.updated, 1)
+	assert.True(t, ops.updated[0].PublishNow)
+	assert.Equal(t, []string{"linkedin"}, ops.updated[0].AddPlatforms)
+	assert.Nil(t, ops.updated[0].ScheduledAt)
+}

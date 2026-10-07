@@ -155,6 +155,12 @@ func TestUpdatePost(t *testing.T) {
 
 	_, err = run(t, ops, "update-post", "p_1", "--scheduled-at", "soon")
 	require.Error(t, err)
+	_, err = run(t, ops, "update-post", "draft_1", "--add-platforms", "linkedin", "--publish-now")
+	require.NoError(t, err)
+	assert.True(t, ops.updated[len(ops.updated)-1].PublishNow)
+
+	_, err = run(t, ops, "update-post", "draft_1", "--publish-now", "--scheduled-at", "2026-09-10T09:00:00Z")
+	require.Error(t, err, "publishing now and at a time are contradictory")
 }
 
 func TestConnectAccount(t *testing.T) {
