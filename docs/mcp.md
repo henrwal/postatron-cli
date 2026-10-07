@@ -27,13 +27,20 @@ API errors come back as tool errors with the API's `code` and message, so the mo
 
 Claude: **Settings → Connectors → Add custom connector**, URL `https://api.postatron.com/mcp`, then sign in to Postatron and approve the connection.
 
-Claude Code:
+Claude Code: the plugin connects the server and adds the Postatron skill, which teaches the agent the workflow (profiles, timezones, platform limits, confirming before publishing).
+
+```
+/plugin marketplace add henrwal/postatron-cli
+/plugin install postatron@postatron
+```
+
+Or connect the server alone:
 
 ```bash
 claude mcp add --transport http postatron https://api.postatron.com/mcp
 ```
 
-Then run `/mcp` in a session to sign in.
+Either way, run `/mcp` in a session to sign in.
 
 Any other client that supports remote MCP servers with OAuth 2.1 and dynamic client registration connects the same way.
 

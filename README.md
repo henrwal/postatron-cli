@@ -18,7 +18,16 @@ https://api.postatron.com/mcp
 ```
 
 Add it as a custom connector in Claude (Settings → Connectors → Add custom connector) and sign in when asked.
-Claude Code:
+
+Claude Code: install the plugin, which connects the server and adds the Postatron skill in one step.
+
+```
+/plugin marketplace add henrwal/postatron-cli
+/plugin install postatron@postatron
+```
+
+Then run `/mcp` and sign in to Postatron.
+To connect the server alone, without the skill:
 
 ```
 claude mcp add --transport http postatron https://api.postatron.com/mcp
@@ -34,6 +43,7 @@ npx skills add henrwal/postatron-cli
 ```
 
 Installs the `postatron` skill into Claude Code, Codex, Cursor and the other agents the [skills](https://skills.sh) CLI supports.
+In Claude Code the plugin above already includes it.
 It teaches the agent the workflow behind a request such as "schedule this to LinkedIn and X tomorrow at 9am": find the right profile, work out the time in your timezone, respect each platform's limits, attach media and confirm before anything is published.
 It works through the MCP tools when they are connected, and through the CLI or REST otherwise.
 
