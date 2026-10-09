@@ -6,12 +6,15 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 
 | Method | Path | What it does | Scope |
 | --- | --- | --- | --- |
-| `POST` | `/v1/posts` | Create a post; `scheduled_at` makes it scheduled | `posts:write` |
+| `POST` | `/v1/posts` | Create a post; `scheduled_at` schedules it, `queue` puts it in a queue's next free slot | `posts:write` |
 | `GET` | `/v1/posts` | List posts, filter by status, platform, profile and date | `posts:read` |
 | `GET` | `/v1/posts/{id}` | One post with per-platform delivery status | `posts:read` |
+| `PATCH` | `/v1/posts/{id}` | Change a draft or scheduled post, or publish it now | `posts:write` |
 | `DELETE` | `/v1/posts/{id}` | Cancel if scheduled, no-op if published | `posts:write` |
 | `GET` | `/v1/accounts` | Connected social accounts and their profiles | `accounts:read` |
+| `POST` | `/v1/accounts/connect` | A link the person opens to connect an account | `accounts:read` |
 | `GET` | `/v1/profiles` | Profiles and the accounts in each | `accounts:read` |
+| `GET` | `/v1/queues` | Posting queues and the next free slot in each | `posts:read` |
 | `GET` | `/v1/usage` | Quota used and remaining, posts per platform | `usage:read` |
 | `GET` | `/v1/analytics` | Engagement, reach, followers and best posts | `posts:read` |
 | `POST` | `/v1/media/uploads` | A link a person uses to attach a file from their device | `posts:write` |
@@ -162,6 +165,9 @@ Content and media:
 - Up to four media items across both, and a post cannot mix images and video.
 - Instagram and TikTok need an image or a video; YouTube needs a video.
 - `scheduled_at` is RFC 3339 and must be at least 5 minutes ahead; omit it to publish now.
+- `queue` (a name or id from `GET /v1/queues`) schedules the post for that queue's next free slot instead; it cannot be combined with `scheduled_at`.
+  Every account must be in the queue's profile, and without `profile`, `platforms` means that profile's accounts.
+  A paused or full queue is refused with `409`; the response's `scheduled_at` is the slot it was given.
 
 Response `201 Created`:
 
@@ -293,6 +299,33 @@ A plan whose account allowance is used up gets `402 quota_exceeded` instead of a
 
 Default comes first, then the rest oldest first.
 `accounts` has the same shape as `GET /v1/accounts`.
+
+### GET /v1/queues
+
+A queue is a profile's weekly posting times, set up in the dashboard under Queues.
+Pass a queue's `name` or `id` as `queue` to `POST /v1/posts` to give a post its next free slot.
+
+```json
+{
+  "data": [
+    {
+      "id": "q7k2m9xw4a",
+      "name": "Weekday mornings",
+      "profile_id": "default",
+      "profile_name": "Default",
+      "timezone": "Europe/London",
+      "slots": [{ "day": 1, "time": "09:00" }, { "day": 3, "time": "09:00" }],
+      "active": true,
+      "next_slot": "2026-10-12T08:00:00Z",
+      "queued": 3
+    }
+  ]
+}
+```
+
+`day` is 0 for Sunday to 6 for Saturday, and `time` is in the queue's `timezone`.
+A slot already taken by another scheduled post for the same profile is skipped.
+`next_slot` is left out when a post added now would not be placed, with `next_slot_error` saying why (the queue is paused, has no slots, or is full for the next year).
 
 ### GET /v1/usage
 
