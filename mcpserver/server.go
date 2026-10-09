@@ -26,11 +26,15 @@ const (
 	ToolListPosts      = "list_posts"
 	ToolGetPost        = "get_post"
 	ToolDeletePost     = "delete_post"
+	ToolDeletePosts    = "delete_posts"
 	ToolUpdatePost     = "update_post"
 	ToolConnectAccount = "connect_account"
 	ToolListAccounts   = "list_accounts"
 	ToolListProfiles   = "list_profiles"
 	ToolListQueues     = "list_queues"
+	ToolCreateQueue    = "create_queue"
+	ToolUpdateQueue    = "update_queue"
+	ToolDeleteQueue    = "delete_queue"
 	ToolGetUsage       = "get_usage"
 	ToolGetAnalytics   = "get_analytics"
 	ToolCreateUpload   = "create_upload"
@@ -39,26 +43,61 @@ const (
 
 // CreatePostInput is the create_post tool input.
 type CreatePostInput struct {
-	Content     string   `json:"content" jsonschema:"The text of the post. Links are detected automatically; posts to X that contain a link are metered separately."`
-	Platforms   []string `json:"platforms,omitempty" jsonschema:"Platforms to publish to, e.g. [\"x\",\"linkedin\",\"bluesky\",\"threads\",\"facebook\"]. Posts to the account on each platform in profile. Use this OR account_ids."`
-	AccountIDs  []string `json:"account_ids,omitempty" jsonschema:"Specific connected account ids from list_accounts. Use this OR platforms."`
-	Profile     string   `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles. Required with platforms when a platform has accounts in more than one profile."`
-	MediaURLs   []string `json:"media_urls,omitempty" jsonschema:"Public https URLs of images or a video to attach (up to 4). Instagram and TikTok need one; YouTube needs a video."`
-	MediaIDs    []string `json:"media_ids,omitempty" jsonschema:"Upload ids from create_upload, for files on the person's own device."`
-	ScheduledAt string   `json:"scheduled_at,omitempty" jsonschema:"RFC 3339 timestamp (UTC) to schedule the post, at least 5 minutes ahead, e.g. 2026-09-10T09:00:00Z. Omit to publish now."`
-	Queue       string   `json:"queue,omitempty" jsonschema:"A queue name or id from list_queues: the post goes out in that queue's next free slot instead of at scheduled_at. Its accounts must be in the queue's profile."`
+	Content     string                  `json:"content" jsonschema:"The text of the post. Links are detected automatically; posts to X that contain a link are metered separately."`
+	Platforms   []string                `json:"platforms,omitempty" jsonschema:"Platforms to publish to, e.g. [\"x\",\"linkedin\",\"bluesky\",\"threads\",\"facebook\"]. Posts to the account on each platform in profile. Use this OR account_ids."`
+	AccountIDs  []string                `json:"account_ids,omitempty" jsonschema:"Specific connected account ids from list_accounts. Use this OR platforms."`
+	Profile     string                  `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles. Required with platforms when a platform has accounts in more than one profile."`
+	MediaURLs   []string                `json:"media_urls,omitempty" jsonschema:"Public https URLs of images or a video to attach (up to 4). Instagram and TikTok need one; YouTube needs a video."`
+	MediaIDs    []string                `json:"media_ids,omitempty" jsonschema:"Upload ids from create_upload, for files on the person's own device."`
+	ScheduledAt string                  `json:"scheduled_at,omitempty" jsonschema:"RFC 3339 timestamp (UTC) to schedule the post, at least 5 minutes ahead, e.g. 2026-09-10T09:00:00Z. Omit to publish now."`
+	Queue       string                  `json:"queue,omitempty" jsonschema:"A queue name or id from list_queues: the post goes out in that queue's next free slot instead of at scheduled_at. Its accounts must be in the queue's profile."`
+	X           *apiv1.XOptions         `json:"x,omitempty" jsonschema:"X-only options: content (X-only text), thread (replies under the first tweet, each with content and optional media_urls or media_ids), community (id or link), share_with_followers, reply_settings (following, mentioned_users, subscribers or verified), long_post (Premium only), poll (options and duration_minutes; no media with a poll)."`
+	Instagram   *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Instagram-only options: post_type (auto, feed, story, reel or carousel), caption (Instagram-only text), first_comment, collaborators (up to 3 usernames), user_tags, ai_generated, trial_reel (manual or performance, reels only)."`
+	TikTok      *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"TikTok settings. Once any is given TikTok needs title, privacy (public_to_everyone, mutual_follow_friends, follower_of_creator or self_only), disable_comment, commercial_content and music_usage_confirmed, plus disable_duet and disable_stitch for a video. Ask the person for these rather than choosing them."`
 }
 
 // UpdatePostInput is the update_post tool input.
 type UpdatePostInput struct {
-	PostID           string   `json:"post_id" jsonschema:"The id of a draft or scheduled post, from create_post or list_posts."`
-	Content          string   `json:"content,omitempty" jsonschema:"New text for the post. Omit to keep it."`
-	ScheduledAt      string   `json:"scheduled_at,omitempty" jsonschema:"New RFC 3339 time, at least 5 minutes ahead; on a draft, this schedules it. Omit to keep it."`
-	PublishNow       bool     `json:"publish_now,omitempty" jsonschema:"Publish the post now, after the other changes. Not with scheduled_at."`
-	AddPlatforms     []string `json:"add_platforms,omitempty" jsonschema:"Platforms to add, e.g. [\"instagram\"]: the account on each in profile. Instagram and TikTok need the post to have an image or a video."`
-	AddAccountIDs    []string `json:"add_account_ids,omitempty" jsonschema:"Specific connected account ids to add, from list_accounts."`
-	RemoveAccountIDs []string `json:"remove_account_ids,omitempty" jsonschema:"Account ids to take off the post. At least one must remain."`
-	Profile          string   `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles, saying which brand add_platforms means."`
+	PostID           string                  `json:"post_id" jsonschema:"The id of a draft or scheduled post, from create_post or list_posts."`
+	Content          string                  `json:"content,omitempty" jsonschema:"New text for the post. Omit to keep it."`
+	ScheduledAt      string                  `json:"scheduled_at,omitempty" jsonschema:"New RFC 3339 time, at least 5 minutes ahead; on a draft, this schedules it. Omit to keep it."`
+	PublishNow       bool                    `json:"publish_now,omitempty" jsonschema:"Publish the post now, after the other changes. Not with scheduled_at."`
+	AddPlatforms     []string                `json:"add_platforms,omitempty" jsonschema:"Platforms to add, e.g. [\"instagram\"]: the account on each in profile. Instagram and TikTok need the post to have an image or a video."`
+	AddAccountIDs    []string                `json:"add_account_ids,omitempty" jsonschema:"Specific connected account ids to add, from list_accounts."`
+	RemoveAccountIDs []string                `json:"remove_account_ids,omitempty" jsonschema:"Account ids to take off the post. At least one must remain."`
+	Profile          string                  `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles, saying which brand add_platforms means."`
+	X                *apiv1.XOptions         `json:"x,omitempty" jsonschema:"Replaces the post's X options as a whole (see create_post); {} clears them."`
+	Instagram        *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Replaces the post's Instagram options as a whole (see create_post); {} clears them."`
+	TikTok           *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"Replaces the post's TikTok settings as a whole (see create_post); {} clears them."`
+}
+
+// DeletePostsInput is the delete_posts tool input.
+type DeletePostsInput struct {
+	IDs []string `json:"post_ids" jsonschema:"Up to 100 post ids."`
+}
+
+// CreateQueueInput is the create_queue tool input.
+type CreateQueueInput struct {
+	Name     string            `json:"name" jsonschema:"What to call the queue, e.g. Weekday mornings."`
+	Profile  string            `json:"profile,omitempty" jsonschema:"The profile (name or id from list_profiles) the queue posts for. Omit for Default."`
+	Timezone string            `json:"timezone" jsonschema:"IANA timezone the slot times are in, e.g. Europe/London. Ask the person if you do not know it."`
+	Slots    []apiv1.QueueSlot `json:"slots,omitempty" jsonschema:"Weekly slots: day 0 (Sunday) to 6 (Saturday) and time as HH:MM."`
+	Paused   bool              `json:"paused,omitempty" jsonschema:"Create it paused, taking no posts until resumed."`
+}
+
+// UpdateQueueInput is the update_queue tool input.
+type UpdateQueueInput struct {
+	Queue    string             `json:"queue" jsonschema:"The queue's name or id from list_queues."`
+	Name     *string            `json:"name,omitempty" jsonschema:"A new name."`
+	Profile  *string            `json:"profile,omitempty" jsonschema:"Move the queue to another profile."`
+	Timezone *string            `json:"timezone,omitempty" jsonschema:"A new IANA timezone."`
+	Slots    *[]apiv1.QueueSlot `json:"slots,omitempty" jsonschema:"Replaces every slot."`
+	Active   *bool              `json:"active,omitempty" jsonschema:"false pauses the queue, true resumes it."`
+}
+
+// QueueInput is the delete_queue tool input.
+type QueueInput struct {
+	Queue string `json:"queue" jsonschema:"The queue's name or id from list_queues."`
 }
 
 // ConnectAccountInput is the connect_account tool input.
@@ -126,6 +165,9 @@ func New(ops apiv1.Operations) *mcp.Server {
 			MediaURLs:  in.MediaURLs,
 			MediaIDs:   in.MediaIDs,
 			Queue:      strings.TrimSpace(in.Queue),
+			X:          in.X,
+			Instagram:  in.Instagram,
+			TikTok:     in.TikTok,
 		}
 		if strings.TrimSpace(in.ScheduledAt) != "" {
 			when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
@@ -179,12 +221,25 @@ func New(ops apiv1.Operations) *mcp.Server {
 	})
 
 	mcp.AddTool(server, describe(&mcp.Tool{
-		Name:        ToolDeletePost,
-		Description: "Cancel a scheduled post. Posts that were already published are left untouched and reported as cancelled=false.",
+		Name: ToolDeletePost,
+		Description: "Delete a post from Postatron. A scheduled post or draft is cancelled and never goes out. A published post is only removed from Postatron: " +
+			"it stays live on the platforms, and the person has to delete it there, so tell them. A post publishing right now, or due within two minutes, cannot be deleted.",
 	}), func(ctx context.Context, _ *mcp.CallToolRequest, in PostIDInput) (*mcp.CallToolResult, *apiv1.DeletePostResponse, error) {
 		out, err := ops.DeletePost(ctx, strings.TrimSpace(in.ID))
 		if err != nil {
 			return handleError[*apiv1.DeletePostResponse](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
+		Name: ToolDeletePosts,
+		Description: "Delete up to 100 posts at once, as delete_post does each: published posts are only removed from Postatron and stay on the platforms. " +
+			"Every id comes back in deleted or failed, with the reason.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in DeletePostsInput) (*mcp.CallToolResult, *apiv1.DeletePostsResponse, error) {
+		out, err := ops.DeletePosts(ctx, apiv1.DeletePostsRequest{IDs: in.IDs})
+		if err != nil {
+			return handleError[*apiv1.DeletePostsResponse](err)
 		}
 		return nil, out, nil
 	})
@@ -201,6 +256,9 @@ func New(ops apiv1.Operations) *mcp.Server {
 			RemoveAccountIDs: in.RemoveAccountIDs,
 			Profile:          in.Profile,
 			PublishNow:       in.PublishNow,
+			X:                in.X,
+			Instagram:        in.Instagram,
+			TikTok:           in.TikTok,
 		}
 		if content := strings.TrimSpace(in.Content); content != "" {
 			req.Content = &content
@@ -261,6 +319,43 @@ func New(ops apiv1.Operations) *mcp.Server {
 		out, err := ops.ListQueues(ctx)
 		if err != nil {
 			return handleError[*apiv1.QueueList](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
+		Name:        ToolCreateQueue,
+		Description: "Create a posting queue: weekly time slots for one profile. Posts added to it with create_post's queue go out in its next free slot.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in CreateQueueInput) (*mcp.CallToolResult, *apiv1.Queue, error) {
+		out, err := ops.CreateQueue(ctx, apiv1.CreateQueueRequest{
+			Name: in.Name, Profile: strings.TrimSpace(in.Profile), Timezone: strings.TrimSpace(in.Timezone), Slots: in.Slots, Paused: in.Paused,
+		})
+		if err != nil {
+			return handleError[*apiv1.Queue](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
+		Name:        ToolUpdateQueue,
+		Description: "Change a queue's name, slots, timezone or profile, or pause or resume it. Posts it has already placed keep their times.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in UpdateQueueInput) (*mcp.CallToolResult, *apiv1.Queue, error) {
+		out, err := ops.UpdateQueue(ctx, strings.TrimSpace(in.Queue), apiv1.UpdateQueueRequest{
+			Name: in.Name, Profile: in.Profile, Timezone: in.Timezone, Slots: in.Slots, Active: in.Active,
+		})
+		if err != nil {
+			return handleError[*apiv1.Queue](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
+		Name:        ToolDeleteQueue,
+		Description: "Delete a queue. Posts it has already placed stay scheduled at their times.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, in QueueInput) (*mcp.CallToolResult, *apiv1.DeleteQueueResponse, error) {
+		out, err := ops.DeleteQueue(ctx, strings.TrimSpace(in.Queue))
+		if err != nil {
+			return handleError[*apiv1.DeleteQueueResponse](err)
 		}
 		return nil, out, nil
 	})
@@ -328,8 +423,13 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolCreatePost:   {Title: "Create or schedule a post", DestructiveHint: boolPtr(true)},
 	ToolListPosts:    {Title: "List posts", ReadOnlyHint: true, IdempotentHint: true},
 	ToolGetPost:      {Title: "Get one post", ReadOnlyHint: true, IdempotentHint: true},
-	ToolDeletePost:   {Title: "Cancel a scheduled post", DestructiveHint: boolPtr(true), IdempotentHint: true},
-	ToolUpdatePost:   {Title: "Change, schedule or publish a post", DestructiveHint: boolPtr(true)},
+	ToolDeletePost:   {Title: "Delete a post", DestructiveHint: boolPtr(true), IdempotentHint: true},
+	ToolDeletePosts:  {Title: "Delete several posts", DestructiveHint: boolPtr(true), IdempotentHint: true},
+	// A queue changes the person's settings, not anything anyone else sees.
+	ToolCreateQueue: {Title: "Create a queue", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
+	ToolUpdateQueue: {Title: "Change a queue", DestructiveHint: boolPtr(false), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	ToolDeleteQueue: {Title: "Delete a queue", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	ToolUpdatePost:  {Title: "Change, schedule or publish a post", DestructiveHint: boolPtr(true)},
 	// A link only; nothing changes until the person finishes signing in.
 	ToolConnectAccount: {Title: "Connect a social account", DestructiveHint: boolPtr(false)},
 	ToolCreateUpload:   {Title: "Ask the person to attach a file", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},

@@ -77,11 +77,15 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newListPostsCommand(g),
 		newGetPostCommand(g),
 		newDeletePostCommand(g),
+		newDeletePostsCommand(g),
 		newUpdatePostCommand(g),
 		newListAccountsCommand(g),
 		newConnectAccountCommand(g),
 		newListProfilesCommand(g),
 		newListQueuesCommand(g),
+		newCreateQueueCommand(g),
+		newUpdateQueueCommand(g),
+		newDeleteQueueCommand(g),
 		newGetUsageCommand(g),
 		newGetAnalyticsCommand(g),
 		newCreateUploadCommand(g),
@@ -100,6 +104,7 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		mediaIDs    []string
 		scheduledAt string
 		queue       string
+		options     platformFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "create-post",
@@ -108,7 +113,10 @@ func newCreatePostCommand(g *globals) *cobra.Command {
   postatron create-post --content "Tomorrow 9am" --platforms bluesky --scheduled-at 2026-09-10T09:00:00Z
   postatron create-post --content "Only this account" --account-ids 1234567890
   postatron create-post --content "For the Acme profile" --platforms x,instagram --profile Acme --media-urls https://example.com/launch.jpg
-  postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"`,
+  postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"
+  postatron create-post --content "Tea or coffee?" --platforms x --poll "Tea,Coffee" --reply-settings following
+  postatron create-post --content "1/ A thread" --platforms x --thread "2/ More" --thread "3/ The end"
+  postatron create-post --content "New reel" --platforms instagram --media-urls https://example.com/r.mp4 --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			req := apiv1.CreatePostRequest{
 				Content:    content,
@@ -118,6 +126,10 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 				MediaURLs:  mediaURLs,
 				MediaIDs:   mediaIDs,
 				Queue:      strings.TrimSpace(queue),
+			}
+			var err error
+			if req.X, req.Instagram, req.TikTok, err = options.build(); err != nil {
+				return err
 			}
 			if scheduledAt != "" && queue != "" {
 				return usageError("use --scheduled-at or --queue, not both")
@@ -148,8 +160,90 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&mediaIDs, "media-ids", nil, "upload ids to attach")
 	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "RFC 3339 time to schedule, at least 5 minutes ahead")
 	cmd.Flags().StringVar(&queue, "queue", "", "queue name or id from list-queues: post in its next free slot")
+	options.register(cmd)
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
+}
+
+// platformFlags are the per-platform options. The common ones have flags of
+// their own; --options takes the whole set as JSON for everything else.
+type platformFlags struct {
+	raw           string
+	thread        []string
+	poll          []string
+	pollMinutes   int
+	replySettings string
+	community     string
+	igType        string
+	firstComment  string
+}
+
+func (f *platformFlags) register(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&f.raw, "options", "", `platform options as JSON, e.g. '{"x":{...},"instagram":{...},"tiktok":{...}}', or @file.json`)
+	cmd.Flags().StringArrayVar(&f.thread, "thread", nil, "an X reply under the first tweet; repeat for each, in order")
+	cmd.Flags().StringSliceVar(&f.poll, "poll", nil, "make the X post a poll with these 2 to 4 options")
+	cmd.Flags().IntVar(&f.pollMinutes, "poll-minutes", 0, "how long the X poll runs (5 to 10080, default a day)")
+	cmd.Flags().StringVar(&f.replySettings, "reply-settings", "", "who can reply on X: following, mentioned_users, subscribers or verified")
+	cmd.Flags().StringVar(&f.community, "community", "", "X Community id or link to post into")
+	cmd.Flags().StringVar(&f.igType, "instagram-type", "", "Instagram post type: auto, feed, story, reel or carousel")
+	cmd.Flags().StringVar(&f.firstComment, "first-comment", "", "Instagram first comment")
+}
+
+// options is the shape --options takes.
+type options struct {
+	X         *apiv1.XOptions         `json:"x,omitempty"`
+	Instagram *apiv1.InstagramOptions `json:"instagram,omitempty"`
+	TikTok    *apiv1.TikTokOptions    `json:"tiktok,omitempty"`
+}
+
+// build merges --options with the individual flags, which win.
+func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv1.TikTokOptions, error) {
+	var o options
+	if raw := strings.TrimSpace(f.raw); raw != "" {
+		data := []byte(raw)
+		if strings.HasPrefix(raw, "@") {
+			read, err := os.ReadFile(strings.TrimPrefix(raw, "@"))
+			if err != nil {
+				return nil, nil, nil, usageError("--options: " + err.Error())
+			}
+			data = read
+		}
+		decoder := json.NewDecoder(strings.NewReader(string(data)))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&o); err != nil {
+			return nil, nil, nil, usageError("--options is not valid: " + err.Error())
+		}
+	}
+	x := func() *apiv1.XOptions {
+		if o.X == nil {
+			o.X = &apiv1.XOptions{}
+		}
+		return o.X
+	}
+	for _, tweet := range f.thread {
+		x().Thread = append(x().Thread, apiv1.XThreadTweet{Content: tweet})
+	}
+	if len(f.poll) > 0 {
+		x().Poll = &apiv1.XPoll{Options: f.poll, DurationMinutes: f.pollMinutes}
+	}
+	if f.replySettings != "" {
+		x().ReplySettings = f.replySettings
+	}
+	if f.community != "" {
+		x().Community = f.community
+	}
+	if f.igType != "" || f.firstComment != "" {
+		if o.Instagram == nil {
+			o.Instagram = &apiv1.InstagramOptions{}
+		}
+		if f.igType != "" {
+			o.Instagram.PostType = f.igType
+		}
+		if f.firstComment != "" {
+			o.Instagram.FirstComment = f.firstComment
+		}
+	}
+	return o.X, o.Instagram, o.TikTok, nil
 }
 
 func newListPostsCommand(g *globals) *cobra.Command {
@@ -221,7 +315,7 @@ func newGetPostCommand(g *globals) *cobra.Command {
 func newDeletePostCommand(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete-post <id>",
-		Short: "Cancel a scheduled post (no-op once published)",
+		Short: "Delete a post (a published one is only removed from Postatron, not the platforms)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := g.ops().DeletePost(cmd.Context(), args[0])
@@ -231,10 +325,38 @@ func newDeletePostCommand(g *globals) *cobra.Command {
 			if g.asJSON {
 				return printJSON(g.out, out)
 			}
-			if out.Cancelled {
+			switch {
+			case out.Cancelled:
 				fmt.Fprintf(g.out, "Cancelled %s\n", out.ID)
-			} else {
-				fmt.Fprintf(g.out, "Not cancelled: %s is %s. %s\n", out.ID, out.Status, out.Message)
+			case out.Deleted:
+				fmt.Fprintf(g.out, "Deleted %s. %s\n", out.ID, out.Message)
+			default:
+				fmt.Fprintf(g.out, "Not deleted: %s is %s. %s\n", out.ID, out.Status, out.Message)
+			}
+			return nil
+		},
+	}
+}
+
+func newDeletePostsCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete-posts <id> [<id>...]",
+		Short: "Delete up to 100 posts at once (published ones are only removed from Postatron)",
+		Args:  cobra.RangeArgs(1, apiv1.MaxBulkDelete),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := g.ops().DeletePosts(cmd.Context(), apiv1.DeletePostsRequest{IDs: args})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, out)
+			}
+			fmt.Fprintf(g.out, "Deleted %d of %d.\n", len(out.Deleted), len(args))
+			for _, f := range out.Failed {
+				fmt.Fprintf(g.out, "  %s: %s\n", f.ID, f.Error)
+			}
+			if out.Message != "" {
+				fmt.Fprintln(g.out, out.Message)
 			}
 			return nil
 		},
@@ -246,6 +368,7 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 		content, scheduledAt, profile         string
 		addPlatforms, addAccounts, removeAccs []string
 		publishNow                            bool
+		options                               platformFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "update-post <id>",
@@ -260,6 +383,10 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 				return usageError("--publish-now and --scheduled-at cannot be used together")
 			}
 			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile, PublishNow: publishNow}
+			var err error
+			if req.X, req.Instagram, req.TikTok, err = options.build(); err != nil {
+				return err
+			}
 			if cmd.Flags().Changed("content") {
 				req.Content = &content
 			}
@@ -288,6 +415,7 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&addAccounts, "add-account-ids", nil, "specific account ids to add")
 	cmd.Flags().StringSliceVar(&removeAccs, "remove-account-ids", nil, "account ids to take off the post")
 	cmd.Flags().StringVar(&profile, "profile", "", "profile name or id that --add-platforms means")
+	options.register(cmd)
 	return cmd
 }
 
@@ -404,6 +532,152 @@ func newListQueuesCommand(g *globals) *cobra.Command {
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%d a week\t%s\t%d\n", q.ID, q.Name, q.ProfileName, len(q.Slots), next, q.Queued)
 			}
 			return tw.Flush()
+		},
+	}
+}
+
+// parseSlots reads slots written as "mon 09:00,wed 13:30".
+func parseSlots(raw []string) ([]apiv1.QueueSlot, error) {
+	days := map[string]int{"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
+	out := make([]apiv1.QueueSlot, 0, len(raw))
+	for _, entry := range raw {
+		fields := strings.Fields(strings.ToLower(entry))
+		if len(fields) != 2 {
+			return nil, usageError(fmt.Sprintf("slot %q should look like \"mon 09:00\"", entry))
+		}
+		day, ok := days[fields[0][:min(3, len(fields[0]))]]
+		if !ok {
+			return nil, usageError(fmt.Sprintf("slot %q: %q is not a day", entry, fields[0]))
+		}
+		out = append(out, apiv1.QueueSlot{Day: day, Time: fields[1]})
+	}
+	return out, nil
+}
+
+func printQueue(w io.Writer, q apiv1.Queue) {
+	state := "active"
+	if !q.Active {
+		state = "paused"
+	}
+	fmt.Fprintf(w, "Queue %s  %q  [%s]\n", q.ID, q.Name, state)
+	fmt.Fprintf(w, "Profile:   %s\n", q.ProfileName)
+	fmt.Fprintf(w, "Timezone:  %s\n", q.Timezone)
+	fmt.Fprintf(w, "Slots:     %d a week\n", len(q.Slots))
+	if q.NextSlot != nil {
+		fmt.Fprintf(w, "Next slot: %s\n", q.NextSlot.UTC().Format(time.RFC3339))
+	} else if q.NextSlotError != "" {
+		fmt.Fprintf(w, "Next slot: %s\n", q.NextSlotError)
+	}
+}
+
+func newCreateQueueCommand(g *globals) *cobra.Command {
+	var (
+		req   apiv1.CreateQueueRequest
+		slots []string
+	)
+	cmd := &cobra.Command{
+		Use:     "create-queue",
+		Short:   "Create a posting queue: weekly time slots for one profile",
+		Example: `  postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,tue 09:00,wed 09:00"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			parsed, err := parseSlots(slots)
+			if err != nil {
+				return err
+			}
+			req.Slots = parsed
+			q, err := g.ops().CreateQueue(cmd.Context(), req)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, q)
+			}
+			printQueue(g.out, *q)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&req.Name, "name", "", "queue name (required)")
+	cmd.Flags().StringVar(&req.Timezone, "timezone", "", "IANA timezone the slots are in, e.g. Europe/London (required)")
+	cmd.Flags().StringVar(&req.Profile, "profile", "", "profile name or id; Default when left out")
+	cmd.Flags().StringSliceVar(&slots, "slots", nil, `weekly slots, e.g. "mon 09:00,thu 17:30"`)
+	cmd.Flags().BoolVar(&req.Paused, "paused", false, "create it paused")
+	_ = cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("timezone")
+	return cmd
+}
+
+func newUpdateQueueCommand(g *globals) *cobra.Command {
+	var (
+		name, timezone, profile string
+		slots                   []string
+		pause, resume           bool
+	)
+	cmd := &cobra.Command{
+		Use:   "update-queue <queue>",
+		Short: "Change a queue's name, slots, timezone or profile, or pause or resume it",
+		Example: `  postatron update-queue "Weekday mornings" --slots "mon 08:30,fri 08:30"
+  postatron update-queue q_123 --pause`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if pause && resume {
+				return usageError("--pause and --resume cannot be used together")
+			}
+			var req apiv1.UpdateQueueRequest
+			if cmd.Flags().Changed("name") {
+				req.Name = &name
+			}
+			if cmd.Flags().Changed("timezone") {
+				req.Timezone = &timezone
+			}
+			if cmd.Flags().Changed("profile") {
+				req.Profile = &profile
+			}
+			if cmd.Flags().Changed("slots") {
+				parsed, err := parseSlots(slots)
+				if err != nil {
+					return err
+				}
+				req.Slots = &parsed
+			}
+			if pause || resume {
+				active := resume
+				req.Active = &active
+			}
+			q, err := g.ops().UpdateQueue(cmd.Context(), args[0], req)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, q)
+			}
+			printQueue(g.out, *q)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "new name")
+	cmd.Flags().StringVar(&timezone, "timezone", "", "new IANA timezone")
+	cmd.Flags().StringVar(&profile, "profile", "", "move the queue to this profile")
+	cmd.Flags().StringSliceVar(&slots, "slots", nil, `replace every slot, e.g. "mon 09:00,thu 17:30"`)
+	cmd.Flags().BoolVar(&pause, "pause", false, "stop the queue taking posts")
+	cmd.Flags().BoolVar(&resume, "resume", false, "let the queue take posts again")
+	return cmd
+}
+
+func newDeleteQueueCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete-queue <queue>",
+		Short: "Delete a queue (posts it already placed stay scheduled)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := g.ops().DeleteQueue(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, out)
+			}
+			fmt.Fprintf(g.out, "Deleted queue %s. %s\n", out.ID, out.Message)
+			return nil
 		},
 	}
 }
@@ -526,7 +800,17 @@ func printPost(w io.Writer, p apiv1.Post) {
 	if p.ScheduledAt != nil {
 		fmt.Fprintf(w, "Scheduled: %s\n", p.ScheduledAt.UTC().Format(time.RFC3339))
 	}
-	fmt.Fprintf(w, "Created:   %s\n", p.CreatedAt.UTC().Format(time.RFC3339))
+	fmt.Fprintf(w, "Created:   %s%s\n", p.CreatedAt.UTC().Format(time.RFC3339), byWhom(p.CreatedBy))
+	if p.UpdatedBy != nil && p.UpdatedAt != nil {
+		fmt.Fprintf(w, "Updated:   %s%s\n", p.UpdatedAt.UTC().Format(time.RFC3339), byWhom(p.UpdatedBy))
+	}
+	if p.Queue != nil {
+		name := p.Queue.Name
+		if name == "" {
+			name = p.Queue.ID + " (deleted)"
+		}
+		fmt.Fprintf(w, "Queue:     %s\n", name)
+	}
 	fmt.Fprintf(w, "Content:   %s\n", oneLine(p.Content))
 	if len(p.Deliveries) > 0 {
 		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
@@ -540,6 +824,13 @@ func printPost(w io.Writer, p apiv1.Post) {
 		}
 		_ = tw.Flush()
 	}
+}
+
+func byWhom(a *apiv1.PostAuthor) string {
+	if a == nil || a.Name == "" {
+		return ""
+	}
+	return " by " + a.Name
 }
 
 func printPostList(w io.Writer, list apiv1.PostList) {

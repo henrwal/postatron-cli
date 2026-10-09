@@ -25,6 +25,33 @@ type fakeOps struct {
 	fetched  []string
 	analysed []apiv1.AnalyticsQuery
 	usageErr error
+	bulk     []apiv1.DeletePostsRequest
+	queues   []apiv1.CreateQueueRequest
+	edits    map[string]apiv1.UpdateQueueRequest
+	dropped  []string
+}
+
+func (f *fakeOps) DeletePosts(_ context.Context, req apiv1.DeletePostsRequest) (*apiv1.DeletePostsResponse, error) {
+	f.bulk = append(f.bulk, req)
+	return &apiv1.DeletePostsResponse{Deleted: req.IDs, Failed: []apiv1.DeletePostsError{}}, nil
+}
+
+func (f *fakeOps) CreateQueue(_ context.Context, req apiv1.CreateQueueRequest) (*apiv1.Queue, error) {
+	f.queues = append(f.queues, req)
+	return &apiv1.Queue{ID: "q2", Name: req.Name, Timezone: req.Timezone, Slots: req.Slots, Active: !req.Paused}, nil
+}
+
+func (f *fakeOps) UpdateQueue(_ context.Context, id string, req apiv1.UpdateQueueRequest) (*apiv1.Queue, error) {
+	if f.edits == nil {
+		f.edits = map[string]apiv1.UpdateQueueRequest{}
+	}
+	f.edits[id] = req
+	return &apiv1.Queue{ID: id, Name: "Weekday mornings", Slots: []apiv1.QueueSlot{}}, nil
+}
+
+func (f *fakeOps) DeleteQueue(_ context.Context, id string) (*apiv1.DeleteQueueResponse, error) {
+	f.dropped = append(f.dropped, id)
+	return &apiv1.DeleteQueueResponse{ID: id, Deleted: true}, nil
 }
 
 func (f *fakeOps) CreatePost(_ context.Context, req apiv1.CreatePostRequest) (*apiv1.Post, error) {
@@ -133,7 +160,7 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		assert.Equal(t, tool.Title, tool.Annotations.Title, tool.Name)
 		isRead := strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "get_")
 		assert.Equal(t, isRead, tool.Annotations.ReadOnlyHint, tool.Name)
-		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "update_post" {
+		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "delete_posts" || tool.Name == "update_post" || tool.Name == "delete_queue" {
 			require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
 			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes or deletes on real accounts", tool.Name)
 		}
@@ -141,6 +168,7 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"create_post", "list_posts", "get_post", "delete_post", "update_post", "connect_account", "list_accounts", "list_profiles",
 		"list_queues", "get_usage", "get_analytics", "create_upload", "get_upload",
+		"delete_posts", "create_queue", "update_queue", "delete_queue",
 	}, names)
 }
 
@@ -288,4 +316,58 @@ func TestQueueTools(t *testing.T) {
 	require.False(t, res.IsError)
 	require.Len(t, ops.created, 1)
 	assert.Equal(t, "Weekday mornings", ops.created[0].Queue)
+}
+
+func TestQueueWriteTools(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "create_queue", Arguments: map[string]any{
+		"name": "Mornings", "timezone": "Europe/London", "profile": "Acme",
+		"slots": []any{map[string]any{"day": 1, "time": "09:00"}},
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.queues, 1)
+	assert.Equal(t, apiv1.CreateQueueRequest{Name: "Mornings", Timezone: "Europe/London", Profile: "Acme",
+		Slots: []apiv1.QueueSlot{{Day: 1, Time: "09:00"}}}, ops.queues[0])
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "update_queue", Arguments: map[string]any{"queue": "Mornings", "active": false}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	edit := ops.edits["Mornings"]
+	require.NotNil(t, edit.Active)
+	assert.False(t, *edit.Active)
+	assert.Nil(t, edit.Slots, "slots left out are kept")
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_queue", Arguments: map[string]any{"queue": "q1"}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	assert.Equal(t, []string{"q1"}, ops.dropped)
+}
+
+func TestDeletePostsAndPlatformOptions(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_posts", Arguments: map[string]any{"post_ids": []any{"p1", "p2"}}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.bulk, 1)
+	assert.Equal(t, []string{"p1", "p2"}, ops.bulk[0].IDs)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "create_post", Arguments: map[string]any{
+		"content": "Which?", "platforms": []any{"x", "instagram"},
+		"x":         map[string]any{"poll": map[string]any{"options": []any{"Tea", "Coffee"}, "duration_minutes": 60}, "reply_settings": "following"},
+		"instagram": map[string]any{"post_type": "reel", "trial_reel": "manual"},
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.created, 1)
+	require.NotNil(t, ops.created[0].X)
+	assert.Equal(t, []string{"Tea", "Coffee"}, ops.created[0].X.Poll.Options)
+	assert.Equal(t, "following", ops.created[0].X.ReplySettings)
+	assert.Equal(t, "manual", ops.created[0].Instagram.TrialReel)
 }

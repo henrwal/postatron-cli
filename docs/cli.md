@@ -28,9 +28,13 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron list-posts` | `GET /v1/posts` |
 | `postatron get-post <id>` | `GET /v1/posts/{id}` |
 | `postatron delete-post <id>` | `DELETE /v1/posts/{id}` |
+| `postatron delete-posts <id>...` | `POST /v1/posts/bulk-delete` |
 | `postatron list-accounts` | `GET /v1/accounts` |
 | `postatron list-profiles` | `GET /v1/profiles` |
 | `postatron list-queues` | `GET /v1/queues` |
+| `postatron create-queue` | `POST /v1/queues` |
+| `postatron update-queue <queue>` | `PATCH /v1/queues/{id}` |
+| `postatron delete-queue <queue>` | `DELETE /v1/queues/{id}` |
 | `postatron get-usage` | `GET /v1/usage` |
 | `postatron get-analytics` | `GET /v1/analytics` |
 | `postatron create-upload` | `POST /v1/media/uploads` |
@@ -56,6 +60,23 @@ postatron create-post --content "New in store" --platforms x,instagram --profile
 | `--media-urls` | Public `https` links to images or one video, up to four. Instagram and TikTok need one; YouTube needs a video. |
 | `--media-ids` | Upload ids from the API's upload endpoint. |
 | `--scheduled-at` | RFC 3339, at least 5 minutes ahead. Omit to publish now. |
+| `--queue` | A queue name or id: the post takes its next free slot. |
+| `--thread` | An X reply under the first tweet; repeat for each. |
+| `--poll` | Make the X post a poll with these 2 to 4 options; `--poll-minutes` for how long. |
+| `--reply-settings` | Who can reply on X: `following`, `mentioned_users`, `subscribers` or `verified`. |
+| `--community` | An X Community id or link. |
+| `--instagram-type` | `auto`, `feed`, `story`, `reel` or `carousel`. |
+| `--first-comment` | Instagram first comment. |
+| `--options` | Every platform option as JSON, or `@file.json`; see the API reference. The flags above win over it. |
+
+```bash
+postatron create-post --content "Tea or coffee?" --platforms x --poll "Tea,Coffee" --reply-settings following
+postatron create-post --content "1/ A thread" --platforms x --thread "2/ More" --thread "3/ The end"
+postatron create-post --content "New reel" --platforms instagram --media-urls https://example.com/r.mp4 \
+  --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'
+```
+
+`update-post` takes the same platform flags; each replaces that platform's options as a whole.
 
 ### list-posts
 
@@ -66,14 +87,19 @@ postatron list-posts --platform x --from 2026-09-01T00:00:00Z --to 2026-09-30T23
 postatron list-posts --cursor eyJvIjo1MH0
 ```
 
-### get-post, delete-post
+### get-post, delete-post, delete-posts
 
 ```bash
 postatron get-post 0AbCdEfGhIjKlMnOpQrS
 postatron delete-post 0AbCdEfGhIjKlMnOpQrS
+postatron delete-posts 0AbCdEfGhIjKlMnOpQrS 1EfGhIjKlMnOpQrStUvW
 ```
 
-`delete-post` cancels a scheduled post; for anything already published it prints `Not cancelled` and exits 0.
+`get-post` shows who created and last changed the post, and the queue it came from.
+`delete-post` cancels a draft or scheduled post.
+A published post is only removed from Postatron and stays live on the platforms; the command says where.
+A post that is publishing, or due within two minutes, prints `Not deleted` with the reason and exits 0.
+`delete-posts` does the same for up to 100 posts and lists any it could not delete.
 
 ### list-accounts, list-profiles
 
@@ -93,10 +119,14 @@ default   Default  x:henry, linkedin:henry-wallis
 
 A queue is a profile's weekly posting times.
 `create-post --queue <name or id>` puts a post in the queue's next free slot instead of at `--scheduled-at`; its accounts must be in the queue's profile.
-Queues are set up in the dashboard, under Queues.
+Set them up in the dashboard under Queues, or here.
 
 ```bash
 postatron list-queues
+postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,tue 09:00,wed 09:00"
+postatron update-queue "Weekday mornings" --slots "mon 08:30,fri 08:30"
+postatron update-queue "Weekday mornings" --pause
+postatron delete-queue "Weekday mornings"
 postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"
 ```
 

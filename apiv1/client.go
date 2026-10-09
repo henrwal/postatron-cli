@@ -116,6 +116,15 @@ func (c *Client) DeletePost(ctx context.Context, id string) (*DeletePostResponse
 	return &out, nil
 }
 
+// DeletePosts calls POST /v1/posts/bulk-delete.
+func (c *Client) DeletePosts(ctx context.Context, req DeletePostsRequest) (*DeletePostsResponse, error) {
+	var out DeletePostsResponse
+	if err := c.do(ctx, http.MethodPost, "/v1/posts/bulk-delete", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListAccounts calls GET /v1/accounts.
 func (c *Client) ListAccounts(ctx context.Context) (*AccountList, error) {
 	var out AccountList
@@ -138,6 +147,33 @@ func (c *Client) ListProfiles(ctx context.Context) (*ProfileList, error) {
 func (c *Client) ListQueues(ctx context.Context) (*QueueList, error) {
 	var out QueueList
 	if err := c.do(ctx, http.MethodGet, "/v1/queues", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateQueue calls POST /v1/queues.
+func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) (*Queue, error) {
+	var out Queue
+	if err := c.do(ctx, http.MethodPost, "/v1/queues", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateQueue calls PATCH /v1/queues/{id}. id may also be the queue's name.
+func (c *Client) UpdateQueue(ctx context.Context, id string, req UpdateQueueRequest) (*Queue, error) {
+	var out Queue
+	if err := c.do(ctx, http.MethodPatch, "/v1/queues/"+url.PathEscape(id), nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeleteQueue calls DELETE /v1/queues/{id}. id may also be the queue's name.
+func (c *Client) DeleteQueue(ctx context.Context, id string) (*DeleteQueueResponse, error) {
+	var out DeleteQueueResponse
+	if err := c.do(ctx, http.MethodDelete, "/v1/queues/"+url.PathEscape(id), nil, nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

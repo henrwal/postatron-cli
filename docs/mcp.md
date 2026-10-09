@@ -8,15 +8,19 @@ There are two ways to connect, with the same tools:
 
 | Tool | Endpoint | Arguments |
 | --- | --- | --- |
-| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue` |
+| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
 | `get_post` | `GET /v1/posts/{id}` | post id |
-| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now` |
+| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now`, `x`, `instagram`, `tiktok` |
 | `delete_post` | `DELETE /v1/posts/{id}` | post id |
+| `delete_posts` | `POST /v1/posts/bulk-delete` | `post_ids` (required, up to 100) |
 | `list_accounts` | `GET /v1/accounts` | none |
 | `connect_account` | `POST /v1/accounts/connect` | `platform` (required), `profile` |
 | `list_profiles` | `GET /v1/profiles` | none |
 | `list_queues` | `GET /v1/queues` | none |
+| `create_queue` | `POST /v1/queues` | `name`, `timezone` (required), `profile`, `slots`, `paused` |
+| `update_queue` | `PATCH /v1/queues/{id}` | `queue` (required, name or id), `name`, `profile`, `timezone`, `slots`, `active` |
+| `delete_queue` | `DELETE /v1/queues/{id}` | `queue` (required, name or id) |
 | `get_usage` | `GET /v1/usage` | none |
 | `get_analytics` | `GET /v1/analytics` | `range`, `platform`, `account_id`, `profile`, `source` |
 | `create_upload` | `POST /v1/media/uploads` | `purpose` |
@@ -126,7 +130,15 @@ Logs go to stderr; stdout carries the protocol and must stay clean.
 >
 > **Claude** calls `delete_post` with the id and reports `cancelled: true`.
 
-Claude asks before running write tools (`create_post`, `delete_post`, `create_upload`) unless you have allowed them for the session.
+Claude asks before running write tools (`create_post`, `update_post`, `delete_post`, `delete_posts`, `delete_queue`) unless you have allowed them for the session.
+
+Deleting a post that has already been published only removes it from Postatron: it stays live on the platforms, and the tool's answer says where.
+
+## Team workspaces
+
+On a team, the sign-in page asks whether to connect the agent to your own account or to the team's workspace.
+In the workspace it sees only the profiles you were given, posts on the owner's plan, and what it does appears in the team's activity under your name.
+It stops working if you leave the team; reconnect it to your own account then.
 
 ## Security notes
 

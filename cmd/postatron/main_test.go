@@ -13,13 +13,17 @@ import (
 )
 
 type fakeOps struct {
-	updated  []apiv1.UpdatePostRequest
-	connects []apiv1.ConnectAccountRequest
-	created  []apiv1.CreatePostRequest
-	listed   []apiv1.ListPostsQuery
-	deleted  []string
-	analysed []apiv1.AnalyticsQuery
-	purposes []string
+	updated      []apiv1.UpdatePostRequest
+	connects     []apiv1.ConnectAccountRequest
+	created      []apiv1.CreatePostRequest
+	listed       []apiv1.ListPostsQuery
+	deleted      []string
+	analysed     []apiv1.AnalyticsQuery
+	purposes     []string
+	bulkDeleted  []string
+	queueCreates []apiv1.CreateQueueRequest
+	queueUpdates []apiv1.UpdateQueueRequest
+	queueDeletes []string
 }
 
 func (f *fakeOps) CreatePost(_ context.Context, req apiv1.CreatePostRequest) (*apiv1.Post, error) {
@@ -112,6 +116,26 @@ func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
 
 // uncappedUsage reports X link posts the way the API does since they stopped
 // being capped: a count with no limit.
+func (f *fakeOps) DeletePosts(_ context.Context, req apiv1.DeletePostsRequest) (*apiv1.DeletePostsResponse, error) {
+	f.bulkDeleted = append(f.bulkDeleted, req.IDs...)
+	return &apiv1.DeletePostsResponse{Deleted: req.IDs, Failed: []apiv1.DeletePostsError{}}, nil
+}
+
+func (f *fakeOps) CreateQueue(_ context.Context, req apiv1.CreateQueueRequest) (*apiv1.Queue, error) {
+	f.queueCreates = append(f.queueCreates, req)
+	return &apiv1.Queue{ID: "q2", Name: req.Name, Timezone: req.Timezone, Slots: req.Slots, Active: !req.Paused}, nil
+}
+
+func (f *fakeOps) UpdateQueue(_ context.Context, id string, req apiv1.UpdateQueueRequest) (*apiv1.Queue, error) {
+	f.queueUpdates = append(f.queueUpdates, req)
+	return &apiv1.Queue{ID: id, Name: id, Timezone: "UTC", Active: req.Active == nil || *req.Active}, nil
+}
+
+func (f *fakeOps) DeleteQueue(_ context.Context, id string) (*apiv1.DeleteQueueResponse, error) {
+	f.queueDeletes = append(f.queueDeletes, id)
+	return &apiv1.DeleteQueueResponse{ID: id, Deleted: true, Message: "Posts it had placed stay scheduled."}, nil
+}
+
 type uncappedUsage struct{ *fakeOps }
 
 func (u *uncappedUsage) GetUsage(ctx context.Context) (*apiv1.UsageReport, error) {
@@ -145,6 +169,7 @@ func TestCommands(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "list-queues", "get-usage", "get-analytics",
 		"create-upload", "get-upload", "update-post", "connect-account",
+		"delete-posts", "create-queue", "update-queue", "delete-queue",
 	}, names)
 }
 
@@ -228,7 +253,7 @@ func TestHumanOutput(t *testing.T) {
 
 	out, err = run(t, ops, "delete-post", "published")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Not cancelled")
+	assert.Contains(t, out, "Not deleted")
 
 	out, err = run(t, ops, "list-accounts")
 	require.NoError(t, err)
@@ -299,4 +324,49 @@ func TestQueues(t *testing.T) {
 
 	_, err = run(t, ops, "create-post", "--content", "Both", "--platforms", "x", "--queue", "q1", "--scheduled-at", "2026-10-12T09:00:00Z")
 	assert.Error(t, err, "a queue picks the time, so a time as well is refused")
+}
+
+func TestQueueCommands(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "create-queue", "--name", "Mornings", "--timezone", "Europe/London", "--slots", "mon 09:00,Thursday 17:30")
+	require.NoError(t, err)
+	require.Len(t, ops.queueCreates, 1)
+	assert.Equal(t, []apiv1.QueueSlot{{Day: 1, Time: "09:00"}, {Day: 4, Time: "17:30"}}, ops.queueCreates[0].Slots)
+	assert.Contains(t, out, "Mornings")
+
+	_, err = run(t, ops, "create-queue", "--name", "Bad", "--timezone", "UTC", "--slots", "someday 09:00")
+	require.Error(t, err)
+
+	_, err = run(t, ops, "update-queue", "Mornings", "--pause")
+	require.NoError(t, err)
+	require.Len(t, ops.queueUpdates, 1)
+	require.NotNil(t, ops.queueUpdates[0].Active)
+	assert.False(t, *ops.queueUpdates[0].Active)
+	assert.Nil(t, ops.queueUpdates[0].Slots)
+
+	out, err = run(t, ops, "delete-queue", "Mornings")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Mornings"}, ops.queueDeletes)
+	assert.Contains(t, out, "stay scheduled")
+}
+
+func TestDeletePostsAndOptions(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "delete-posts", "p1", "p2")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"p1", "p2"}, ops.bulkDeleted)
+	assert.Contains(t, out, "Deleted 2 of 2")
+
+	_, err = run(t, ops, "create-post", "--content", "Tea or coffee?", "--platforms", "x", "--poll", "Tea,Coffee",
+		"--thread", "2/ more, with a comma", "--options", `{"instagram":{"post_type":"reel"}}`)
+	require.NoError(t, err)
+	require.Len(t, ops.created, 1)
+	req := ops.created[0]
+	require.NotNil(t, req.X)
+	assert.Equal(t, []string{"Tea", "Coffee"}, req.X.Poll.Options)
+	assert.Equal(t, []apiv1.XThreadTweet{{Content: "2/ more, with a comma"}}, req.X.Thread)
+	assert.Equal(t, "reel", req.Instagram.PostType)
+
+	_, err = run(t, ops, "create-post", "--content", "x", "--platforms", "x", "--options", `{"x":{"polll":{}}}`)
+	require.Error(t, err, "a misspelt option is refused rather than ignored")
 }

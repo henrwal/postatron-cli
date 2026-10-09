@@ -43,6 +43,9 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | `media_ids` | Upload ids that are `READY`. |
 | `scheduled_at` | RFC 3339 with an offset, at least 5 minutes ahead. Omit to publish now. |
 | `queue` | A queue name or id from `list_queues`. The post takes its next free slot; not with `scheduled_at`. |
+| `x` | X options: `content`, `thread` (`[{content, media_urls, media_ids}]`), `community`, `share_with_followers`, `reply_settings`, `long_post`, `poll` (`{options, duration_minutes}`). |
+| `instagram` | `post_type`, `caption`, `first_comment`, `collaborators`, `user_tags`, `ai_generated`, `trial_reel`. |
+| `tiktok` | `title`, `description`, `privacy`, `disable_comment`, `disable_duet`, `disable_stitch`, `commercial_content`, `your_brand`, `branded_content`, `music_usage_confirmed`. All the required ones or none. |
 
 ## Errors
 
@@ -53,8 +56,9 @@ Every error has the shape `{"error": {"code": "...", "message": "...", "details"
 | 400 | `validation_error` for a media URL that cannot be fetched |
 | 401 | `unauthorized` |
 | 402 | `quota_exceeded` |
-| 403 | `insufficient_scope`, `subscription_required` |
+| 403 | `insufficient_scope`, `subscription_required`, `workspace_forbidden` |
 | 404 | `not_found` |
+| 409 | `conflict`: the post started publishing, or the queue is paused or full |
 | 422 | `validation_error` |
 | 429 | `rate_limited`, with a `Retry-After` header in seconds |
 

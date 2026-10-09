@@ -79,9 +79,11 @@ postatron create-post --content "New in store" --platforms instagram --profile A
 postatron list-posts --status scheduled
 postatron get-post <id>
 postatron delete-post <id>
+postatron delete-posts <id> <id>
 postatron list-accounts
 postatron list-profiles
 postatron list-queues
+postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,wed 09:00"
 postatron create-post --content "Whenever there's room" --platforms x --queue "Weekday mornings"
 postatron get-usage
 postatron get-analytics --range 7d

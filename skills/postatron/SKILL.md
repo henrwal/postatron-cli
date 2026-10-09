@@ -42,8 +42,9 @@ Work through these in order.
    - It must be at least 5 minutes ahead.
 4. **Check the content.** See the limits below. Instagram and TikTok need an image or video, YouTube a video.
 5. **Attach media** if there is any; see Media.
-6. **Confirm when anything was inferred.** If you chose the profile, account or time yourself, or the post goes out immediately, show the text, the accounts as `@handle on Platform`, and the time in the person's timezone, then wait for a yes. A fully specified request to schedule can go straight through.
-7. **Create it**, then report the post id, the accounts, the time in their timezone and its status. Mention that a scheduled post can be cancelled until it publishes.
+6. **Add platform options** when the person asks for them; see Platform options.
+7. **Confirm when anything was inferred.** If you chose the profile, account or time yourself, or the post goes out immediately, show the text, the accounts as `@handle on Platform`, and the time in the person's timezone, then wait for a yes. A fully specified request to schedule can go straight through.
+8. **Create it**, then report the post id, the accounts, the time in their timezone and its status. Mention that a scheduled post can be cancelled until it publishes.
 
 ### Example: "schedule this to LinkedIn and X tomorrow at 9am"
 
@@ -85,6 +86,26 @@ When one text is too long for one platform, say which and offer a shorter versio
 - **A file on the person's device**, or one only you can see: you cannot send the bytes. Call `create_upload` (CLI `postatron create-upload --purpose "..."`), give the person the `upload_url`, and wait for them to say it is done. Then `get_upload` must show `READY`; pass its id in `media_ids`. Ask them to tell you when they have uploaded rather than polling.
 - Up to four items per post, all images or one video; never a mix.
 
+## Platform options
+
+`create_post` and `update_post` take `x`, `instagram` and `tiktok` objects for what only that platform has.
+Use them when the person asks; never add one they did not ask for.
+
+- **X thread**: "make it a thread" means `x.thread`, a list of `{content}` for the tweets after the first, each within 280 characters. Each tweet counts against the quota as its own post, so say how many. A thread cannot go into a Community.
+- **X poll**: `x.poll` with 2 to 4 `options` of up to 25 characters and `duration_minutes` (default a day). A poll cannot have media.
+- **Who can reply on X**: `x.reply_settings` is `following`, `mentioned_users`, `subscribers` or `verified`.
+- **Different wording per platform**: `x.content` replaces the text on X, `instagram.caption` on Instagram. Use these rather than separate posts.
+- **Instagram**: `post_type` (`reel`, `story`, `carousel`, `feed`), `first_comment` (hashtags often go here), `collaborators` (up to 3 usernames), `trial_reel` (`manual` or `performance`).
+- **TikTok**: once any setting is given TikTok needs them all: `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video. Ask the person for privacy and the commercial disclosure, and for their agreement to TikTok's Music Usage Confirmation; never choose those for them. Leave `tiktok` out entirely to use TikTok's defaults.
+
+`update_post` replaces one platform's options as a whole: send the full set you want, or `{}` to clear them.
+
+## Queues
+
+`create_queue` sets up weekly slots for a profile: a `name`, an IANA `timezone` (ask if you do not know it) and `slots` of `{day, time}`, day 0 for Sunday to 6 for Saturday.
+`update_queue` changes a queue by name or id, and `active: false` pauses it.
+`delete_queue` removes one; posts it placed stay scheduled.
+
 ## Everything else
 
 | Task | MCP tool | CLI |
@@ -96,7 +117,9 @@ When one text is too long for one platform, say which and offer a shorter versio
 | Change a draft or scheduled post (text, time, add or drop accounts) | `update_post` | `update-post <id>` |
 | Their drafts | `list_posts` with `status: draft` | `list-posts --status draft` |
 | Send a draft out | `update_post` with `publish_now: true` or `scheduled_at` | `update-post <id> --publish-now` |
-| Cancel a scheduled post | `delete_post` | `delete-post <id>` |
+| Cancel or delete a post | `delete_post` | `delete-post <id>` |
+| Delete several posts | `delete_posts` | `delete-posts <id>...` |
+| Set up or change a queue | `create_queue`, `update_queue`, `delete_queue` | `create-queue`, `update-queue`, `delete-queue` |
 | Connect a social account | `connect_account` | `connect-account <platform>` |
 | How posts are doing | `get_analytics` (`range` 7d, 30d or 90d; optional `profile`, `platform`) | `get-analytics` |
 | Quota left this month | `get_usage` | `get-usage` |
@@ -105,7 +128,8 @@ When one text is too long for one platform, say which and offer a shorter versio
 - When the person adds to a post they already scheduled ("put it on Instagram too"), use `update_post` with `add_platforms`, not a second `create_post`: it stays one post, edited and cancelled as one.
 - "Submit my draft to LinkedIn": find it with `list_posts` and `status: draft`, then `update_post` with `add_platforms: ["linkedin"]` and `publish_now: true` (or `scheduled_at` for later). If more than one draft could be the one, show them and ask. Confirm before publishing now: it goes to their real account.
 - When a platform they ask for is not connected, call `connect_account` and give them the `connect_url`. Nothing is connected until they finish signing in there, so wait for them to say so, then check with `list_accounts`.
-- `delete_post` only cancels posts that are still scheduled. Once published, it reports `cancelled: false`, and the post has to be removed on the platform itself.
+- `delete_post` cancels a draft or scheduled post. On a published post it only removes it from Postatron: **it stays live on the platform**. Say so plainly before deleting one, and after, so nobody thinks it has gone from X or Instagram. A post publishing now, or due within two minutes, cannot be deleted.
+- `get_post` says who made a post (`created_by`), who last changed it (`updated_by`) and which queue placed it (`queue`). In a team they can be different people.
 - Analytics has no X numbers: X charges per read, so Postatron does not fetch them. A metric a platform does not report is `null`; say "not reported", not zero.
 
 ## Errors
@@ -117,6 +141,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 | `rate_limited` | Wait for the seconds in `retry_after` (or the `Retry-After` header), then retry once. |
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
 | `subscription_required` | Postatron's API needs a paid plan. Tell the person. |
+| `workspace_forbidden` | The key or connection works in a team they are no longer on. Tell them to reconnect, or make a key in their own account. |
 
 ## Do not
 

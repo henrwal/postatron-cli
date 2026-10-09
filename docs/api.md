@@ -10,11 +10,15 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `GET` | `/v1/posts` | List posts, filter by status, platform, profile and date | `posts:read` |
 | `GET` | `/v1/posts/{id}` | One post with per-platform delivery status | `posts:read` |
 | `PATCH` | `/v1/posts/{id}` | Change a draft or scheduled post, or publish it now | `posts:write` |
-| `DELETE` | `/v1/posts/{id}` | Cancel if scheduled, no-op if published | `posts:write` |
+| `DELETE` | `/v1/posts/{id}` | Delete a post; a published one is only removed from Postatron | `posts:write` |
+| `POST` | `/v1/posts/bulk-delete` | Delete up to 100 posts at once | `posts:write` |
 | `GET` | `/v1/accounts` | Connected social accounts and their profiles | `accounts:read` |
 | `POST` | `/v1/accounts/connect` | A link the person opens to connect an account | `accounts:read` |
 | `GET` | `/v1/profiles` | Profiles and the accounts in each | `accounts:read` |
 | `GET` | `/v1/queues` | Posting queues and the next free slot in each | `posts:read` |
+| `POST` | `/v1/queues` | Create a queue | `posts:write` |
+| `PATCH` | `/v1/queues/{id}` | Change, pause or resume a queue | `posts:write` |
+| `DELETE` | `/v1/queues/{id}` | Delete a queue | `posts:write` |
 | `GET` | `/v1/usage` | Quota used and remaining, posts per platform | `usage:read` |
 | `GET` | `/v1/analytics` | Engagement, reach, followers and best posts | `posts:read` |
 | `POST` | `/v1/media/uploads` | A link a person uses to attach a file from their device | `posts:write` |
@@ -44,6 +48,13 @@ API access is included on every paid plan.
 Keys keep working through a cancellation-pending period and stop when the subscription ends (`403 subscription_required`).
 
 The remote MCP endpoint also accepts OAuth access tokens (`pto_...`), which MCP clients obtain themselves through the authorisation code flow with PKCE.
+
+### Team workspaces
+
+A key or MCP connection made by a team member can work in the team owner's account instead of the member's own.
+Create the key while the dashboard is in that workspace, or choose the workspace on the sign-in page when connecting an agent.
+It then sees only the profiles the member was granted, uses the owner's plan and quota, and what it changes appears in the team's activity under the member's name.
+Membership is checked on every request: once the member leaves or is removed, or the owner's plan no longer includes teams, the key gets `403 workspace_forbidden`.
 
 ## Profiles
 
@@ -127,7 +138,9 @@ Non-2xx responses share one envelope:
 | 402 | `quota_exceeded` | Destination-post ceiling reached |
 | 403 | `insufficient_scope` | Key lacks the scope |
 | 403 | `subscription_required` | No active subscription |
-| 404 | `not_found` | Unknown endpoint, post or upload |
+| 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team |
+| 404 | `not_found` | Unknown endpoint, post, queue or upload |
+| 409 | `conflict` | The post started publishing, or a queue is paused or full |
 | 422 | `validation_error` | Bad input; `details` says which field |
 | 429 | `rate_limited` | Per-key limit hit; honour `Retry-After` |
 | 500 | `internal_error` | Something broke on our side |
@@ -169,6 +182,51 @@ Content and media:
   Every account must be in the queue's profile, and without `profile`, `platforms` means that profile's accounts.
   A paused or full queue is refused with `409`; the response's `scheduled_at` is the slot it was given.
 
+Platform options:
+
+`x`, `instagram` and `tiktok` hold what only that platform has, the same settings as the dashboard composer, checked by the same rules.
+Each needs an account on its platform among the post's accounts.
+
+```json
+{
+  "content": "1/ Tea or coffee?",
+  "platforms": ["x", "instagram"],
+  "media_urls": ["https://example.com/reel.mp4"],
+  "x": {
+    "content": "1/ Tea or coffee? Vote below",
+    "thread": [{ "content": "2/ Results on Friday", "media_urls": ["https://example.com/chart.png"] }],
+    "reply_settings": "following"
+  },
+  "instagram": { "post_type": "reel", "first_comment": "#tea #coffee", "trial_reel": "manual" }
+}
+```
+
+| Platform | Field | Meaning |
+| --- | --- | --- |
+| X | `content` | Text for X only, in place of `content` |
+| X | `thread` | Replies under the first tweet, each `{content, media_urls, media_ids}`; each tweet counts as a destination-post |
+| X | `community` | A Community id or link to post into; not with a thread |
+| X | `share_with_followers` | Also show a Community post to followers |
+| X | `reply_settings` | `following`, `mentioned_users`, `subscribers` or `verified`; left out, everyone can reply |
+| X | `long_post` | Over 280 characters, up to 25,000; X accepts it from Premium accounts only |
+| X | `poll` | `{options, duration_minutes}`: 2 to 4 options of up to 25 characters, 5 minutes to 7 days (default a day); no media with a poll |
+| Instagram | `post_type` | `auto` (default), `feed`, `story`, `reel` or `carousel` |
+| Instagram | `caption` | Text for Instagram only |
+| Instagram | `first_comment` | Posted as the first comment; not on stories |
+| Instagram | `collaborators` | Up to 3 usernames invited to co-author |
+| Instagram | `user_tags` | `{username, x, y, media_index}` tags on images, `x` and `y` from 0 to 1 |
+| Instagram | `ai_generated` | Ask Instagram to show its AI label |
+| Instagram | `trial_reel` | `manual` or `performance`: share a reel with non-followers first |
+| TikTok | `title` | Up to 90 characters |
+| TikTok | `description` | A photo post's long description |
+| TikTok | `privacy` | `public_to_everyone`, `mutual_follow_friends`, `follower_of_creator` or `self_only` |
+| TikTok | `disable_comment`, `disable_duet`, `disable_stitch` | Turn those off |
+| TikTok | `commercial_content`, `your_brand`, `branded_content` | Commercial content disclosure |
+| TikTok | `music_usage_confirmed` | The person agrees to TikTok's Music Usage Confirmation |
+
+TikTok asks for its settings as a set: once any is given, `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
+Leave `tiktok` out to post with TikTok's defaults.
+
 Response `201 Created`:
 
 ```json
@@ -188,6 +246,13 @@ Response `201 Created`:
 ```
 
 `status` is `pending` for immediate posts (the worker picks them up within seconds) or `scheduled`.
+
+Every post, here and from the other endpoints, also carries:
+
+- `source`: where it was made, `dashboard`, `api` or `mcp`.
+- `created_by` and `updated_by`: `{id, name}` of the person who made it and of whoever last changed it; in a team they can differ.
+- `queue`: `{id, name}` of the queue that chose its time, when one did (`name` is empty once the queue is deleted).
+- `x`, `instagram`, `tiktok`: the platform options it was saved with, when it has any.
 
 ### GET /v1/posts
 
@@ -216,11 +281,29 @@ Unknown ids return `404`.
 
 ### DELETE /v1/posts/{id}
 
-Cancels a scheduled post and removes it.
-Posts that are pending, processing or already published are left alone and reported with `cancelled: false`:
+Deletes a post from Postatron, by the same rule as the dashboard.
+
+- A draft, or a scheduled post more than two minutes from its time, is removed and never goes out: `deleted: true`, and for a scheduled post `cancelled: true` and `status: "cancelled"`.
+- A published, failed or partly published post is removed from Postatron only.
+  **Nothing is ever deleted on a platform**: the post stays live there, and `message` names where.
+- A post being published right now, or due within two minutes, is left alone with `deleted: false` and the reason.
 
 ```json
-{ "id": "...", "status": "published", "cancelled": false, "message": "post has already been published; nothing to cancel" }
+{ "id": "...", "status": "published", "deleted": true, "cancelled": false, "message": "Removed from Postatron only. It is still live on X and LinkedIn; delete it there if it should go." }
+```
+
+### POST /v1/posts/bulk-delete
+
+Deletes up to 100 posts, each by the rule above, eight at a time.
+
+```json
+{ "ids": ["0AbCd...", "1EfGh..."] }
+```
+
+Every id comes back in exactly one list, in the order asked:
+
+```json
+{ "deleted": ["0AbCd..."], "failed": [{ "id": "1EfGh...", "error": "Not deleted: it is about to be published." }], "message": "1 of the deleted posts had been published. They were removed from Postatron only and are still live on the platforms." }
 ```
 
 ### PATCH /v1/posts/{id}
@@ -243,6 +326,7 @@ Every field is optional; what is left out keeps its value.
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
 Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
 The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
+`x`, `instagram` and `tiktok` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
 Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
 A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
 `publish_now: true` publishes straight away after the other changes, for a draft or a scheduled post, and cannot be combined with `scheduled_at`; the post comes back `processing`.
@@ -262,7 +346,8 @@ Returns a link that connects one of your social accounts.
 ```
 
 The link opens Postatron and starts that platform's sign-in; nothing is connected until the person finishes it there.
-It only works for the Postatron account that asked for it: signed in as someone else, the page refuses it.
+It only works for the person whose key asked for it: signed in as someone else, the page refuses it.
+A team workspace key's link also opens the dashboard in that workspace.
 A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link.
 
 ### GET /v1/accounts
@@ -302,7 +387,7 @@ Default comes first, then the rest oldest first.
 
 ### GET /v1/queues
 
-A queue is a profile's weekly posting times, set up in the dashboard under Queues.
+A queue is a profile's weekly posting times, set up in the dashboard under Queues or with `POST /v1/queues`.
 Pass a queue's `name` or `id` as `queue` to `POST /v1/posts` to give a post its next free slot.
 
 ```json
@@ -326,6 +411,30 @@ Pass a queue's `name` or `id` as `queue` to `POST /v1/posts` to give a post its 
 `day` is 0 for Sunday to 6 for Saturday, and `time` is in the queue's `timezone`.
 A slot already taken by another scheduled post for the same profile is skipped.
 `next_slot` is left out when a post added now would not be placed, with `next_slot_error` saying why (the queue is paused, has no slots, or is full for the next year).
+
+### POST /v1/queues
+
+```json
+{ "name": "Weekday mornings", "profile": "Acme", "timezone": "Europe/London", "slots": [{ "day": 1, "time": "09:00" }], "paused": false }
+```
+
+`name` and `timezone` (an IANA name) are required; `profile` defaults to Default.
+Slots are sorted and duplicates dropped.
+Returns `201` with the queue as `GET /v1/queues` shows it; an account holds at most 50 queues (`409`).
+
+### PATCH /v1/queues/{id}
+
+`{id}` is the queue's id or its name.
+Any of `name`, `profile`, `timezone`, `slots` (replaces every slot) and `active` (`false` pauses, `true` resumes); what is left out keeps its value.
+Posts the queue has already placed keep their times.
+
+### DELETE /v1/queues/{id}
+
+Deletes the queue; posts it already placed stay scheduled.
+
+```json
+{ "id": "q7k2m9xw4a", "deleted": true, "message": "Posts it had already placed stay scheduled at their times." }
+```
 
 ### GET /v1/usage
 
