@@ -30,6 +30,7 @@ const (
 	ToolConnectAccount = "connect_account"
 	ToolListAccounts   = "list_accounts"
 	ToolListProfiles   = "list_profiles"
+	ToolListQueues     = "list_queues"
 	ToolGetUsage       = "get_usage"
 	ToolGetAnalytics   = "get_analytics"
 	ToolCreateUpload   = "create_upload"
@@ -45,6 +46,7 @@ type CreatePostInput struct {
 	MediaURLs   []string `json:"media_urls,omitempty" jsonschema:"Public https URLs of images or a video to attach (up to 4). Instagram and TikTok need one; YouTube needs a video."`
 	MediaIDs    []string `json:"media_ids,omitempty" jsonschema:"Upload ids from create_upload, for files on the person's own device."`
 	ScheduledAt string   `json:"scheduled_at,omitempty" jsonschema:"RFC 3339 timestamp (UTC) to schedule the post, at least 5 minutes ahead, e.g. 2026-09-10T09:00:00Z. Omit to publish now."`
+	Queue       string   `json:"queue,omitempty" jsonschema:"A queue name or id from list_queues: the post goes out in that queue's next free slot instead of at scheduled_at. Its accounts must be in the queue's profile."`
 }
 
 // UpdatePostInput is the update_post tool input.
@@ -123,6 +125,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 			Profile:    in.Profile,
 			MediaURLs:  in.MediaURLs,
 			MediaIDs:   in.MediaIDs,
+			Queue:      strings.TrimSpace(in.Queue),
 		}
 		if strings.TrimSpace(in.ScheduledAt) != "" {
 			when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
@@ -251,6 +254,18 @@ func New(ops apiv1.Operations) *mcp.Server {
 	})
 
 	mcp.AddTool(server, describe(&mcp.Tool{
+		Name: ToolListQueues,
+		Description: "List posting queues: weekly time slots per profile, each with its next free slot. Pass a queue's name to create_post " +
+			"as queue to schedule a post into that slot instead of choosing a time.",
+	}), func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, *apiv1.QueueList, error) {
+		out, err := ops.ListQueues(ctx)
+		if err != nil {
+			return handleError[*apiv1.QueueList](err)
+		}
+		return nil, out, nil
+	})
+
+	mcp.AddTool(server, describe(&mcp.Tool{
 		Name: ToolGetAnalytics,
 		Description: "How the posts and accounts are performing over the last 7, 30 or 90 days: engagement rate, reach, followers, " +
 			"totals per platform, the best posts, and any account that needs reconnecting. Metrics a platform does not report are null. X is not included.",
@@ -309,6 +324,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolListAccounts: {Title: "List connected accounts", ReadOnlyHint: true, IdempotentHint: true},
 	ToolListProfiles: {Title: "List profiles", ReadOnlyHint: true, IdempotentHint: true},
+	ToolListQueues:   {Title: "List queues", ReadOnlyHint: true, IdempotentHint: true},
 	ToolCreatePost:   {Title: "Create or schedule a post", DestructiveHint: boolPtr(true)},
 	ToolListPosts:    {Title: "List posts", ReadOnlyHint: true, IdempotentHint: true},
 	ToolGetPost:      {Title: "Get one post", ReadOnlyHint: true, IdempotentHint: true},

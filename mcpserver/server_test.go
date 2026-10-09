@@ -64,6 +64,11 @@ func (f *fakeOps) ListAccounts(_ context.Context) (*apiv1.AccountList, error) {
 	return &apiv1.AccountList{Data: []apiv1.Account{{ID: "a1", Platform: "x", Username: "henry"}}}, nil
 }
 
+func (f *fakeOps) ListQueues(_ context.Context) (*apiv1.QueueList, error) {
+	return &apiv1.QueueList{Data: []apiv1.Queue{{ID: "q1", Name: "Weekday mornings", ProfileID: "default", ProfileName: "Default",
+		Timezone: "UTC", Slots: []apiv1.QueueSlot{{Day: 1, Time: "09:00"}}, Active: true}}}, nil
+}
+
 func (f *fakeOps) ListProfiles(_ context.Context) (*apiv1.ProfileList, error) {
 	return &apiv1.ProfileList{Data: []apiv1.Profile{{ID: "default", Name: "Default", IsDefault: true,
 		Accounts: []apiv1.Account{{ID: "a1", Platform: "x", Username: "henry", ProfileID: "default", ProfileName: "Default"}}}}}, nil
@@ -135,7 +140,7 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{
 		"create_post", "list_posts", "get_post", "delete_post", "update_post", "connect_account", "list_accounts", "list_profiles",
-		"get_usage", "get_analytics", "create_upload", "get_upload",
+		"list_queues", "get_usage", "get_analytics", "create_upload", "get_upload",
 	}, names)
 }
 
@@ -265,4 +270,22 @@ func TestUpdatePostPublishesADraft(t *testing.T) {
 	assert.True(t, ops.updated[0].PublishNow)
 	assert.Equal(t, []string{"linkedin"}, ops.updated[0].AddPlatforms)
 	assert.Nil(t, ops.updated[0].ScheduledAt)
+}
+
+func TestQueueTools(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_queues", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "create_post", Arguments: map[string]any{
+		"content": "Whenever there's room", "platforms": []string{"x"}, "queue": " Weekday mornings ",
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.created, 1)
+	assert.Equal(t, "Weekday mornings", ops.created[0].Queue)
 }

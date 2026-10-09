@@ -66,6 +66,11 @@ type CreatePostRequest struct {
 	MediaURLs   []string   `json:"media_urls,omitempty"`
 	MediaIDs    []string   `json:"media_ids,omitempty"`
 	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
+	// Queue (a name or id from GET /v1/queues) schedules the post for that
+	// queue's next free slot instead of ScheduledAt. Its accounts must all be
+	// in the queue's profile, which is also what Platforms means when Profile
+	// is left out.
+	Queue string `json:"queue,omitempty"`
 }
 
 // UpdatePostRequest is the body of PATCH /v1/posts/{id}. Every field is
@@ -189,6 +194,37 @@ type Profile struct {
 // ProfileList is the response of GET /v1/profiles.
 type ProfileList struct {
 	Data []Profile `json:"data"`
+}
+
+// QueueSlot is a weekly posting time: Day 0 is Sunday to 6 Saturday, Time
+// "HH:MM" in the queue's timezone.
+type QueueSlot struct {
+	Day  int    `json:"day"`
+	Time string `json:"time"`
+}
+
+// Queue is a weekly posting schedule for one profile. Posts added to it go
+// out in its next free slot.
+type Queue struct {
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	ProfileID   string      `json:"profile_id"`
+	ProfileName string      `json:"profile_name"`
+	Timezone    string      `json:"timezone"`
+	Slots       []QueueSlot `json:"slots"`
+	// Active is false while the queue is paused and takes no new posts.
+	Active bool `json:"active"`
+	// NextSlot is when a post added now would go out; nil when none would,
+	// with NextSlotError saying why.
+	NextSlot      *time.Time `json:"next_slot,omitempty"`
+	NextSlotError string     `json:"next_slot_error,omitempty"`
+	// Queued is how many of its posts are still to go out.
+	Queued int `json:"queued"`
+}
+
+// QueueList is the response of GET /v1/queues.
+type QueueList struct {
+	Data []Queue `json:"data"`
 }
 
 // UsageReport is the response of GET /v1/usage. The dashboard renders the
@@ -358,6 +394,7 @@ type Operations interface {
 	ListAccounts(ctx context.Context) (*AccountList, error)
 	ConnectAccount(ctx context.Context, req ConnectAccountRequest) (*ConnectLink, error)
 	ListProfiles(ctx context.Context) (*ProfileList, error)
+	ListQueues(ctx context.Context) (*QueueList, error)
 	GetUsage(ctx context.Context) (*UsageReport, error)
 	GetAnalytics(ctx context.Context, query AnalyticsQuery) (*AnalyticsReport, error)
 	CreateUpload(ctx context.Context, req CreateUploadRequest) (*Upload, error)

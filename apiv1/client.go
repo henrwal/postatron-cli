@@ -134,6 +134,15 @@ func (c *Client) ListProfiles(ctx context.Context) (*ProfileList, error) {
 	return &out, nil
 }
 
+// ListQueues calls GET /v1/queues.
+func (c *Client) ListQueues(ctx context.Context) (*QueueList, error) {
+	var out QueueList
+	if err := c.do(ctx, http.MethodGet, "/v1/queues", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // GetAnalytics calls GET /v1/analytics.
 func (c *Client) GetAnalytics(ctx context.Context, query AnalyticsQuery) (*AnalyticsReport, error) {
 	params := url.Values{}

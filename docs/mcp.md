@@ -8,7 +8,7 @@ There are two ways to connect, with the same tools:
 
 | Tool | Endpoint | Arguments |
 | --- | --- | --- |
-| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` |
+| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
 | `get_post` | `GET /v1/posts/{id}` | post id |
 | `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now` |
@@ -16,6 +16,7 @@ There are two ways to connect, with the same tools:
 | `list_accounts` | `GET /v1/accounts` | none |
 | `connect_account` | `POST /v1/accounts/connect` | `platform` (required), `profile` |
 | `list_profiles` | `GET /v1/profiles` | none |
+| `list_queues` | `GET /v1/queues` | none |
 | `get_usage` | `GET /v1/usage` | none |
 | `get_analytics` | `GET /v1/analytics` | `range`, `platform`, `account_id`, `profile`, `source` |
 | `create_upload` | `POST /v1/media/uploads` | `purpose` |

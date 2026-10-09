@@ -81,6 +81,8 @@ postatron get-post <id>
 postatron delete-post <id>
 postatron list-accounts
 postatron list-profiles
+postatron list-queues
+postatron create-post --content "Whenever there's room" --platforms x --queue "Weekday mornings"
 postatron get-usage
 postatron get-analytics --range 7d
 postatron create-upload --purpose "photo for Tuesday"

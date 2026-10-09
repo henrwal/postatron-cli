@@ -30,6 +30,7 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron delete-post <id>` | `DELETE /v1/posts/{id}` |
 | `postatron list-accounts` | `GET /v1/accounts` |
 | `postatron list-profiles` | `GET /v1/profiles` |
+| `postatron list-queues` | `GET /v1/queues` |
 | `postatron get-usage` | `GET /v1/usage` |
 | `postatron get-analytics` | `GET /v1/analytics` |
 | `postatron create-upload` | `POST /v1/media/uploads` |
@@ -86,6 +87,22 @@ postatron list-profiles
 ID        NAME     ACCOUNTS
 default   Default  x:henry, linkedin:henry-wallis
 8f2c1a9e  Acme     x:acmehq, instagram:acme
+```
+
+### list-queues
+
+A queue is a profile's weekly posting times.
+`create-post --queue <name or id>` puts a post in the queue's next free slot instead of at `--scheduled-at`; its accounts must be in the queue's profile.
+Queues are set up in the dashboard, under Queues.
+
+```bash
+postatron list-queues
+postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"
+```
+
+```text
+ID          NAME              PROFILE  SLOTS      NEXT SLOT             QUEUED
+q7k2m9xw4a  Weekday mornings  Default  5 a week   2026-10-12T08:00:00Z  3
 ```
 
 ### get-usage

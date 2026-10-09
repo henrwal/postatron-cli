@@ -34,6 +34,7 @@ Work through these in order.
    - A requested platform has an account in more than one profile and nobody said which: ask. Do not guess; the API refuses the post anyway.
    - Only one profile has the platforms: no `profile` needed.
 3. **Work out the time.**
+   - "Add it to my queue", "whenever there's a slot" or a queue named: call `list_queues`, pass the queue's name as `queue`, and leave out `scheduled_at`. The post takes the queue's next free slot, which `list_queues` shows as `next_slot`. All its accounts must be in the queue's profile, and `platforms` means that profile's accounts when you give no `profile`. A paused queue takes nothing.
    - "Now", or no time given: omit `scheduled_at` and the post publishes immediately.
    - Otherwise build an RFC 3339 timestamp **with the person's UTC offset**, e.g. `2026-10-07T09:00:00+01:00`; the API converts it.
      Take the offset from the conversation, or from `date +%z` on their machine. If you cannot tell their timezone, ask.
@@ -89,6 +90,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 | Task | MCP tool | CLI |
 | --- | --- | --- |
 | What is connected | `list_profiles`, `list_accounts` | `list-profiles`, `list-accounts` |
+| Their posting queues and next free slots | `list_queues` | `list-queues` |
 | What is scheduled | `list_posts` with `status: scheduled` | `list-posts --status scheduled` |
 | Did it go out | `get_post` | `get-post <id>` |
 | Change a draft or scheduled post (text, time, add or drop accounts) | `update_post` | `update-post <id>` |

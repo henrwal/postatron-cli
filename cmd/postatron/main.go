@@ -81,6 +81,7 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newListAccountsCommand(g),
 		newConnectAccountCommand(g),
 		newListProfilesCommand(g),
+		newListQueuesCommand(g),
 		newGetUsageCommand(g),
 		newGetAnalyticsCommand(g),
 		newCreateUploadCommand(g),
@@ -98,14 +99,16 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		mediaURLs   []string
 		mediaIDs    []string
 		scheduledAt string
+		queue       string
 	)
 	cmd := &cobra.Command{
 		Use:   "create-post",
-		Short: "Create a post (publishes now, or at --scheduled-at)",
+		Short: "Create a post (publishes now, at --scheduled-at, or in a --queue's next slot)",
 		Example: `  postatron create-post --content "Launch day!" --platforms x,linkedin
   postatron create-post --content "Tomorrow 9am" --platforms bluesky --scheduled-at 2026-09-10T09:00:00Z
   postatron create-post --content "Only this account" --account-ids 1234567890
-  postatron create-post --content "For the Acme profile" --platforms x,instagram --profile Acme --media-urls https://example.com/launch.jpg`,
+  postatron create-post --content "For the Acme profile" --platforms x,instagram --profile Acme --media-urls https://example.com/launch.jpg
+  postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			req := apiv1.CreatePostRequest{
 				Content:    content,
@@ -114,6 +117,10 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 				Profile:    profile,
 				MediaURLs:  mediaURLs,
 				MediaIDs:   mediaIDs,
+				Queue:      strings.TrimSpace(queue),
+			}
+			if scheduledAt != "" && queue != "" {
+				return usageError("use --scheduled-at or --queue, not both")
 			}
 			if scheduledAt != "" {
 				when, err := time.Parse(time.RFC3339, scheduledAt)
@@ -140,6 +147,7 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&mediaURLs, "media-urls", nil, "public https links to images or a video to attach (up to 4)")
 	cmd.Flags().StringSliceVar(&mediaIDs, "media-ids", nil, "upload ids to attach")
 	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "RFC 3339 time to schedule, at least 5 minutes ahead")
+	cmd.Flags().StringVar(&queue, "queue", "", "queue name or id from list-queues: post in its next free slot")
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
 }
@@ -368,6 +376,32 @@ func newListProfilesCommand(g *globals) *cobra.Command {
 					summary = "(none)"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", p.ID, p.Name, summary)
+			}
+			return tw.Flush()
+		},
+	}
+}
+
+func newListQueuesCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list-queues",
+		Short: "List posting queues and when each next has a free slot",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			list, err := g.ops().ListQueues(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, list)
+			}
+			tw := tabwriter.NewWriter(g.out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "ID\tNAME\tPROFILE\tSLOTS\tNEXT SLOT\tQUEUED")
+			for _, q := range list.Data {
+				next := q.NextSlotError
+				if q.NextSlot != nil {
+					next = q.NextSlot.UTC().Format(time.RFC3339)
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%d a week\t%s\t%d\n", q.ID, q.Name, q.ProfileName, len(q.Slots), next, q.Queued)
 			}
 			return tw.Flush()
 		},

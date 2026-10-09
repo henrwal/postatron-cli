@@ -64,6 +64,14 @@ func (f *fakeOps) ListAccounts(_ context.Context) (*apiv1.AccountList, error) {
 	}}, nil
 }
 
+func (f *fakeOps) ListQueues(_ context.Context) (*apiv1.QueueList, error) {
+	next := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
+	return &apiv1.QueueList{Data: []apiv1.Queue{
+		{ID: "q1", Name: "Weekday mornings", ProfileName: "Default", Timezone: "UTC", Slots: []apiv1.QueueSlot{{Day: 1, Time: "09:00"}, {Day: 2, Time: "09:00"}}, Active: true, NextSlot: &next, Queued: 3},
+		{ID: "q2", Name: "Weekends", ProfileName: "Acme", Timezone: "UTC", NextSlotError: "This queue is paused."},
+	}}, nil
+}
+
 func (f *fakeOps) ListProfiles(_ context.Context) (*apiv1.ProfileList, error) {
 	return &apiv1.ProfileList{Data: []apiv1.Profile{
 		{ID: "default", Name: "Default", IsDefault: true, Accounts: []apiv1.Account{{Platform: "x", Username: "henry"}}},
@@ -135,7 +143,7 @@ func TestCommands(t *testing.T) {
 		names = append(names, cmd.Name())
 	}
 	assert.ElementsMatch(t, []string{
-		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "get-usage", "get-analytics",
+		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "list-queues", "get-usage", "get-analytics",
 		"create-upload", "get-upload", "update-post", "connect-account",
 	}, names)
 }
@@ -273,4 +281,22 @@ func TestUploadCommands(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "Upload u1  [READY]")
 	assert.Contains(t, out, "shoe.jpg")
+}
+
+func TestQueues(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "list-queues")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Weekday mornings")
+	assert.Contains(t, out, "2026-10-12T09:00:00Z")
+	assert.Contains(t, out, "This queue is paused.")
+
+	_, err = run(t, ops, "create-post", "--content", "Whenever", "--platforms", "x", "--queue", "Weekday mornings")
+	require.NoError(t, err)
+	require.Len(t, ops.created, 1)
+	assert.Equal(t, "Weekday mornings", ops.created[0].Queue)
+	assert.Nil(t, ops.created[0].ScheduledAt)
+
+	_, err = run(t, ops, "create-post", "--content", "Both", "--platforms", "x", "--queue", "q1", "--scheduled-at", "2026-10-12T09:00:00Z")
+	assert.Error(t, err, "a queue picks the time, so a time as well is refused")
 }

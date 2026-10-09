@@ -42,6 +42,7 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | `media_urls` | Public https links, up to four. |
 | `media_ids` | Upload ids that are `READY`. |
 | `scheduled_at` | RFC 3339 with an offset, at least 5 minutes ahead. Omit to publish now. |
+| `queue` | A queue name or id from `list_queues`. The post takes its next free slot; not with `scheduled_at`. |
 
 ## Errors
 
