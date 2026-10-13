@@ -128,7 +128,7 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 				Queue:      strings.TrimSpace(queue),
 			}
 			var err error
-			if req.X, req.Instagram, req.TikTok, err = options.build(); err != nil {
+			if req.X, req.Instagram, req.TikTok, req.YouTube, err = options.build(); err != nil {
 				return err
 			}
 			if scheduledAt != "" && queue != "" {
@@ -179,7 +179,7 @@ type platformFlags struct {
 }
 
 func (f *platformFlags) register(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&f.raw, "options", "", `platform options as JSON, e.g. '{"x":{...},"instagram":{...},"tiktok":{...}}', or @file.json`)
+	cmd.Flags().StringVar(&f.raw, "options", "", `platform options as JSON, e.g. '{"x":{...},"instagram":{...},"tiktok":{...},"youtube":{...}}', or @file.json`)
 	cmd.Flags().StringArrayVar(&f.thread, "thread", nil, "an X reply under the first tweet; repeat for each, in order")
 	cmd.Flags().StringSliceVar(&f.poll, "poll", nil, "make the X post a poll with these 2 to 4 options")
 	cmd.Flags().IntVar(&f.pollMinutes, "poll-minutes", 0, "how long the X poll runs (5 to 10080, default a day)")
@@ -194,24 +194,25 @@ type options struct {
 	X         *apiv1.XOptions         `json:"x,omitempty"`
 	Instagram *apiv1.InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *apiv1.TikTokOptions    `json:"tiktok,omitempty"`
+	YouTube   *apiv1.YouTubeOptions   `json:"youtube,omitempty"`
 }
 
 // build merges --options with the individual flags, which win.
-func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv1.TikTokOptions, error) {
+func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv1.TikTokOptions, *apiv1.YouTubeOptions, error) {
 	var o options
 	if raw := strings.TrimSpace(f.raw); raw != "" {
 		data := []byte(raw)
 		if strings.HasPrefix(raw, "@") {
 			read, err := os.ReadFile(strings.TrimPrefix(raw, "@"))
 			if err != nil {
-				return nil, nil, nil, usageError("--options: " + err.Error())
+				return nil, nil, nil, nil, usageError("--options: " + err.Error())
 			}
 			data = read
 		}
 		decoder := json.NewDecoder(strings.NewReader(string(data)))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&o); err != nil {
-			return nil, nil, nil, usageError("--options is not valid: " + err.Error())
+			return nil, nil, nil, nil, usageError("--options is not valid: " + err.Error())
 		}
 	}
 	x := func() *apiv1.XOptions {
@@ -243,7 +244,7 @@ func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv
 			o.Instagram.FirstComment = f.firstComment
 		}
 	}
-	return o.X, o.Instagram, o.TikTok, nil
+	return o.X, o.Instagram, o.TikTok, o.YouTube, nil
 }
 
 func newListPostsCommand(g *globals) *cobra.Command {
@@ -384,7 +385,7 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 			}
 			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile, PublishNow: publishNow}
 			var err error
-			if req.X, req.Instagram, req.TikTok, err = options.build(); err != nil {
+			if req.X, req.Instagram, req.TikTok, req.YouTube, err = options.build(); err != nil {
 				return err
 			}
 			if cmd.Flags().Changed("content") {

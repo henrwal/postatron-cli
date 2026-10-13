@@ -75,7 +75,7 @@ postatron create-post --json --content "..." --platforms linkedin,x --scheduled-
 | LinkedIn | 3,000 | optional |
 | Facebook | 63,206 | optional |
 | Instagram | 2,200 | an image or a video, required |
-| TikTok | 150 | an image or a video, required |
+| TikTok | 2,200 (a photo post's description 4,000) | an image or a video, required |
 | YouTube | | a video, required |
 
 When one text is too long for one platform, say which and offer a shorter version for it as a separate post, rather than cutting it silently.
@@ -96,7 +96,7 @@ Use them when the person asks; never add one they did not ask for.
 - **Who can reply on X**: `x.reply_settings` is `following`, `mentioned_users`, `subscribers` or `verified`.
 - **Different wording per platform**: `x.content` replaces the text on X, `instagram.caption` on Instagram. Use these rather than separate posts.
 - **Instagram**: `post_type` (`reel`, `story`, `carousel`, `feed`), `first_comment` (hashtags often go here), `collaborators` (up to 3 usernames), `trial_reel` (`manual` or `performance`).
-- **TikTok**: once any setting is given TikTok needs them all: `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video. Ask the person for privacy and the commercial disclosure, and for their agreement to TikTok's Music Usage Confirmation; never choose those for them. Leave `tiktok` out entirely to use TikTok's defaults.
+- **TikTok**: `title` is a video's caption (up to 2,200) or a photo post's title (up to 90), and `description` a photo post's text (up to 4,000). To publish directly, TikTok needs `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video; `auto_add_music` (photos) and `ai_generated` are optional. Ask the person for privacy and the commercial disclosure, and for their agreement to TikTok's Music Usage Confirmation; never choose those for them. `draft: true`, or leaving `tiktok` out, sends the post to their TikTok inbox to finish in the app instead; a draft takes only `title` and `description` on photos, and nothing on a video.
 - **YouTube**: `title` (up to 100 characters, defaults to the first line), `description` (replaces the text), `privacy` (`public` by default, `unlisted` or `private`), `made_for_kids`, `tags`, `category_id`, `first_comment` and `thumbnail_url`. YouTube asks every uploader whether a video is made for kids: ask the person rather than choosing. No `<` or `>` in a title or description. A first comment needs the channel to have allowed first comments in the dashboard composer, and a custom thumbnail a verified channel; if either is refused the video still goes up and the delivery's `error` says why.
 
 `update_post` replaces one platform's options as a whole: send the full set you want, or `{}` to clear them.

@@ -166,17 +166,26 @@ const (
 	TikTokPrivate   = "self_only"
 )
 
-// TikTokOptions are the settings TikTok asks for. Once any is given, TikTok
-// needs them all: Title, Privacy, DisableComment, CommercialContent and
+// TikTokOptions are the settings TikTok asks for. A post is published
+// directly once Privacy is given, and TikTok then needs the creator's choice
+// of each of Privacy, DisableComment, CommercialContent and
 // MusicUsageConfirmed, plus DisableDuet and DisableStitch for a video, and
-// one of YourBrand or BrandedContent when CommercialContent is true. Leave
-// the whole block out to post with TikTok's defaults.
+// one of YourBrand or BrandedContent when CommercialContent is true.
+//
+// With Draft, or with the whole block left out, the post goes to the
+// creator's TikTok inbox instead, and they finish it in the app: a draft
+// takes only Title and Description (photos), and a video draft takes
+// neither.
 type TikTokOptions struct {
-	// Title is up to 90 characters.
+	// Title is a video's caption, up to 2200 characters, replacing the
+	// post's text there; or a photo post's title, up to 90. TikTok counts
+	// characters in UTF-16, so an emoji counts as two.
 	Title string `json:"title,omitempty"`
-	// Description is a photo post's long description; it replaces the
-	// post's text there. Videos have only a title.
+	// Description is a photo post's long description, up to 4000
+	// characters; it replaces the post's text there.
 	Description string `json:"description,omitempty"`
+	// Draft uploads to the creator's TikTok inbox instead of publishing.
+	Draft bool `json:"draft,omitempty"`
 	// Privacy is public_to_everyone, mutual_follow_friends,
 	// follower_of_creator or self_only.
 	Privacy           string `json:"privacy,omitempty"`
@@ -191,6 +200,10 @@ type TikTokOptions struct {
 	// MusicUsageConfirmed is the person agreeing to TikTok's Music Usage
 	// Confirmation, which TikTok requires before it publishes.
 	MusicUsageConfirmed *bool `json:"music_usage_confirmed,omitempty"`
+	// AutoAddMusic lets TikTok add recommended music to a photo post.
+	AutoAddMusic bool `json:"auto_add_music,omitempty"`
+	// AIGenerated asks TikTok to label the post as AI-generated.
+	AIGenerated bool `json:"ai_generated,omitempty"`
 }
 
 // YouTube privacy statuses for YouTubeOptions.Privacy.

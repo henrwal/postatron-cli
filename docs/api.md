@@ -171,7 +171,9 @@ Choosing accounts:
 
 Content and media:
 
-- `content` is required; per-platform limits apply (X 280 characters, or 25,000 for X Premium accounts; Bluesky 300; Threads 500; LinkedIn 3,000; Facebook 63,206; Instagram 2,200; TikTok 150).
+- `content` is required; per-platform limits apply (X 280 characters, or 25,000 for X Premium accounts; Bluesky 300; Threads 500; LinkedIn 3,000; Facebook 63,206; Instagram 2,200; TikTok 2,200 for a video's caption and 4,000 for a photo post's description).
+  Each platform is judged on the text it receives, so `x.content`, `instagram.caption`, `tiktok.title` on a video and `tiktok.description` on photos are measured in place of `content`.
+  TikTok counts in UTF-16, so an emoji counts as two.
 - `media_urls`: public `https` links to images or one video, fetched by the server.
   Addresses inside a private network are refused.
 - `media_ids`: upload ids from `POST /v1/media/uploads`, for files on someone's own device.
@@ -217,12 +219,15 @@ Each needs an account on its platform among the post's accounts.
 | Instagram | `user_tags` | `{username, x, y, media_index}` tags on images, `x` and `y` from 0 to 1 |
 | Instagram | `ai_generated` | Ask Instagram to show its AI label |
 | Instagram | `trial_reel` | `manual` or `performance`: share a reel with non-followers first |
-| TikTok | `title` | Up to 90 characters |
-| TikTok | `description` | A photo post's long description |
+| TikTok | `title` | A video's caption, up to 2,200 characters, in place of `content`; or a photo post's title, up to 90 |
+| TikTok | `description` | A photo post's text, up to 4,000 characters, in place of `content` |
+| TikTok | `draft` | Send it to the creator's TikTok inbox to finish in the app, instead of publishing |
 | TikTok | `privacy` | `public_to_everyone`, `mutual_follow_friends`, `follower_of_creator` or `self_only` |
 | TikTok | `disable_comment`, `disable_duet`, `disable_stitch` | Turn those off |
 | TikTok | `commercial_content`, `your_brand`, `branded_content` | Commercial content disclosure |
 | TikTok | `music_usage_confirmed` | The person agrees to TikTok's Music Usage Confirmation |
+| TikTok | `auto_add_music` | Let TikTok add recommended music to a photo post |
+| TikTok | `ai_generated` | Ask TikTok to label the post as AI-generated |
 | YouTube | `title` | Up to 100 characters; left out, the first line of `content` |
 | YouTube | `description` | Replaces `content` as the description, up to 5000 bytes |
 | YouTube | `privacy` | `public` (default), `unlisted` or `private` |
@@ -232,8 +237,10 @@ Each needs an account on its platform among the post's accounts.
 | YouTube | `first_comment` | Posted on the video once it is up, up to 10,000 characters; not on a video made for kids |
 | YouTube | `thumbnail_url`, `thumbnail_id` | A JPEG or PNG link, or an upload id, for a custom thumbnail |
 
-TikTok asks for its settings as a set: once any is given, `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
-Leave `tiktok` out to post with TikTok's defaults.
+A TikTok post is published directly once it has a `privacy`, and TikTok then asks for its settings as a set: `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
+With `draft: true`, or with `tiktok` left out, the post goes to the creator's TikTok inbox instead, and they finish it in the TikTok app, which asks for the rest itself.
+A draft takes only `title` and `description` on photos; a video draft carries the video alone, so it takes neither, and the other settings are refused.
+A delivery to the inbox has no `url`, since nothing is public until the creator posts it.
 
 YouTube refuses `<` and `>` in a title or description, so they are refused here too, including in `content` when it is the description.
 The categories a video can be given are `1` Film & Animation, `2` Autos & Vehicles, `10` Music, `15` Pets & Animals, `17` Sports, `19` Travel & Events, `20` Gaming, `22` People & Blogs, `23` Comedy, `24` Entertainment, `25` News & Politics, `26` Howto & Style, `27` Education, `28` Science & Technology and `29` Nonprofits & Activism.
