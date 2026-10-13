@@ -225,7 +225,7 @@ Each needs an account on its platform among the post's accounts.
 | TikTok | `privacy` | `public_to_everyone`, `mutual_follow_friends`, `follower_of_creator` or `self_only` |
 | TikTok | `disable_comment`, `disable_duet`, `disable_stitch` | Turn those off |
 | TikTok | `commercial_content`, `your_brand`, `branded_content` | Commercial content disclosure |
-| TikTok | `music_usage_confirmed` | The person agrees to TikTok's Music Usage Confirmation |
+| TikTok | `music_usage_confirmed` | The person accepts TikTok's declaration: "By posting, you agree to TikTok's Music Usage Confirmation", or with `branded_content` "...TikTok's Branded Content Policy and Music Usage Confirmation". Show it to them; never agree for them |
 | TikTok | `auto_add_music` | Let TikTok add recommended music to a photo post |
 | TikTok | `ai_generated` | Ask TikTok to label the post as AI-generated |
 | YouTube | `title` | Up to 100 characters; left out, the first line of `content` |

@@ -197,8 +197,11 @@ type TikTokOptions struct {
 	YourBrand *bool `json:"your_brand,omitempty"`
 	// BrandedContent discloses a paid partnership; it cannot be private.
 	BrandedContent *bool `json:"branded_content,omitempty"`
-	// MusicUsageConfirmed is the person agreeing to TikTok's Music Usage
-	// Confirmation, which TikTok requires before it publishes.
+	// MusicUsageConfirmed is the person accepting TikTok's declaration,
+	// which TikTok requires before it publishes: "By posting, you agree to
+	// TikTok's Music Usage Confirmation", or with BrandedContent "...TikTok's
+	// Branded Content Policy and Music Usage Confirmation". Show it to them;
+	// never agree for them.
 	MusicUsageConfirmed *bool `json:"music_usage_confirmed,omitempty"`
 	// AutoAddMusic lets TikTok add recommended music to a photo post.
 	AutoAddMusic bool `json:"auto_add_music,omitempty"`
