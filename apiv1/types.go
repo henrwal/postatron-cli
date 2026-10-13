@@ -75,11 +75,12 @@ type CreatePostRequest struct {
 	// in the queue's profile, which is also what Platforms means when Profile
 	// is left out.
 	Queue string `json:"queue,omitempty"`
-	// X, Instagram and TikTok hold the options only that platform has. Each
-	// needs an account on its platform among the post's accounts.
+	// X, Instagram, TikTok and YouTube hold the options only that platform
+	// has. Each needs an account on its platform among the post's accounts.
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
+	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
 }
 
 // X reply audiences for XOptions.ReplySettings. Empty means everyone.
@@ -192,6 +193,51 @@ type TikTokOptions struct {
 	MusicUsageConfirmed *bool `json:"music_usage_confirmed,omitempty"`
 }
 
+// YouTube privacy statuses for YouTubeOptions.Privacy.
+const (
+	YouTubePublic   = "public"
+	YouTubeUnlisted = "unlisted"
+	YouTubePrivate  = "private"
+)
+
+// YouTubeOptions are the settings only YouTube has. Leave the block out to
+// upload a public video titled with the first line of the content, described
+// by the content, in People & Blogs.
+type YouTubeOptions struct {
+	// Title is up to 100 characters, without < or >. Left out, it is the
+	// first line of the content.
+	Title string `json:"title,omitempty"`
+	// Description replaces the content as the video's description: up to
+	// 5000 bytes, without < or >.
+	Description string `json:"description,omitempty"`
+	// Privacy is public (the default), unlisted or private.
+	Privacy string `json:"privacy,omitempty"`
+	// MadeForKids is the uploader's declaration that the video is made for
+	// children, which YouTube asks of every upload. Ask the person rather
+	// than choosing; left out, nothing is declared and the channel's default
+	// audience setting, if it has one, applies.
+	MadeForKids *bool `json:"made_for_kids,omitempty"`
+	// Tags are up to 500 characters in all, counting a comma between tags
+	// and quotes around a tag with a space in it.
+	Tags []string `json:"tags,omitempty"`
+	// CategoryID is a YouTube category id: 1 Film & Animation, 2 Autos &
+	// Vehicles, 10 Music, 15 Pets & Animals, 17 Sports, 19 Travel & Events,
+	// 20 Gaming, 22 People & Blogs (the default), 23 Comedy, 24
+	// Entertainment, 25 News & Politics, 26 Howto & Style, 27 Education, 28
+	// Science & Technology or 29 Nonprofits & Activism.
+	CategoryID string `json:"category_id,omitempty"`
+	// FirstComment is posted on the video once it is up, up to 10000
+	// characters. The channel must have allowed first comments in the
+	// dashboard composer, and a video made for kids takes no comments.
+	FirstComment string `json:"first_comment,omitempty"`
+	// ThumbnailURL (a public https link to a JPEG or PNG) or ThumbnailID
+	// (an upload id from CreateUpload) sets a custom thumbnail, which
+	// YouTube allows only on verified channels. When a post is read back,
+	// ThumbnailURL holds the thumbnail it carries.
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	ThumbnailID  string `json:"thumbnail_id,omitempty"`
+}
+
 // UpdatePostRequest is the body of PATCH /v1/posts/{id}. Every field is
 // optional and anything left out keeps its value. A draft or a scheduled post
 // can change; once it has started publishing it is fixed. A draft stays a
@@ -213,11 +259,12 @@ type UpdatePostRequest struct {
 	RemoveAccountIDs []string `json:"remove_account_ids,omitempty"`
 	// Profile chooses which brand AddPlatforms means.
 	Profile string `json:"profile,omitempty"`
-	// X, Instagram and TikTok replace that platform's options as a whole;
-	// an empty object ({}) clears them.
+	// X, Instagram, TikTok and YouTube replace that platform's options as a
+	// whole; an empty object ({}) clears them.
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
+	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
 }
 
 // ConnectAccountRequest is the body of POST /v1/accounts/connect.
@@ -246,7 +293,10 @@ type Delivery struct {
 	Username  string `json:"username"`
 	Status    string `json:"status"`
 	URL       string `json:"url,omitempty"`
-	Error     string `json:"error,omitempty"`
+	// Error says why a delivery failed. On a published one it says what
+	// did not go through after the post itself, such as a first comment or
+	// a YouTube thumbnail.
+	Error string `json:"error,omitempty"`
 }
 
 // Post is the API representation of a post.
@@ -273,6 +323,7 @@ type Post struct {
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
+	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
 }
 
 // PostAuthor names a person on the account. Name is empty when the person

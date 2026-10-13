@@ -88,7 +88,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 
 ## Platform options
 
-`create_post` and `update_post` take `x`, `instagram` and `tiktok` objects for what only that platform has.
+`create_post` and `update_post` take `x`, `instagram`, `tiktok` and `youtube` objects for what only that platform has.
 Use them when the person asks; never add one they did not ask for.
 
 - **X thread**: "make it a thread" means `x.thread`, a list of `{content}` for the tweets after the first, each within 280 characters. Each tweet counts against the quota as its own post, so say how many. A thread cannot go into a Community.
@@ -97,6 +97,7 @@ Use them when the person asks; never add one they did not ask for.
 - **Different wording per platform**: `x.content` replaces the text on X, `instagram.caption` on Instagram. Use these rather than separate posts.
 - **Instagram**: `post_type` (`reel`, `story`, `carousel`, `feed`), `first_comment` (hashtags often go here), `collaborators` (up to 3 usernames), `trial_reel` (`manual` or `performance`).
 - **TikTok**: once any setting is given TikTok needs them all: `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video. Ask the person for privacy and the commercial disclosure, and for their agreement to TikTok's Music Usage Confirmation; never choose those for them. Leave `tiktok` out entirely to use TikTok's defaults.
+- **YouTube**: `title` (up to 100 characters, defaults to the first line), `description` (replaces the text), `privacy` (`public` by default, `unlisted` or `private`), `made_for_kids`, `tags`, `category_id`, `first_comment` and `thumbnail_url`. YouTube asks every uploader whether a video is made for kids: ask the person rather than choosing. No `<` or `>` in a title or description. A first comment needs the channel to have allowed first comments in the dashboard composer, and a custom thumbnail a verified channel; if either is refused the video still goes up and the delivery's `error` says why.
 
 `update_post` replaces one platform's options as a whole: send the full set you want, or `{}` to clear them.
 

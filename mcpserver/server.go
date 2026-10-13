@@ -54,6 +54,7 @@ type CreatePostInput struct {
 	X           *apiv1.XOptions         `json:"x,omitempty" jsonschema:"X-only options: content (X-only text), thread (replies under the first tweet, each with content and optional media_urls or media_ids), community (id or link), share_with_followers, reply_settings (following, mentioned_users, subscribers or verified), long_post (Premium only), poll (options and duration_minutes; no media with a poll)."`
 	Instagram   *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Instagram-only options: post_type (auto, feed, story, reel or carousel), caption (Instagram-only text), first_comment, collaborators (up to 3 usernames), user_tags, ai_generated, trial_reel (manual or performance, reels only)."`
 	TikTok      *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"TikTok settings. Once any is given TikTok needs title, privacy (public_to_everyone, mutual_follow_friends, follower_of_creator or self_only), disable_comment, commercial_content and music_usage_confirmed, plus disable_duet and disable_stitch for a video. Ask the person for these rather than choosing them."`
+	YouTube     *apiv1.YouTubeOptions   `json:"youtube,omitempty" jsonschema:"YouTube-only options: title (up to 100 characters; default the first line of content), description (replaces content, up to 5000 bytes), privacy (public, unlisted or private; default public), made_for_kids (ask the person), tags, category_id (default 22, People & Blogs), first_comment (needs the channel to have allowed first comments in the dashboard; not on videos made for kids), thumbnail_url or thumbnail_id (JPEG or PNG; verified channels only). No < or > in title or description."`
 }
 
 // UpdatePostInput is the update_post tool input.
@@ -69,6 +70,7 @@ type UpdatePostInput struct {
 	X                *apiv1.XOptions         `json:"x,omitempty" jsonschema:"Replaces the post's X options as a whole (see create_post); {} clears them."`
 	Instagram        *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Replaces the post's Instagram options as a whole (see create_post); {} clears them."`
 	TikTok           *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"Replaces the post's TikTok settings as a whole (see create_post); {} clears them."`
+	YouTube          *apiv1.YouTubeOptions   `json:"youtube,omitempty" jsonschema:"Replaces the post's YouTube options as a whole (see create_post); {} clears them."`
 }
 
 // DeletePostsInput is the delete_posts tool input.
@@ -168,6 +170,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 			X:          in.X,
 			Instagram:  in.Instagram,
 			TikTok:     in.TikTok,
+			YouTube:    in.YouTube,
 		}
 		if strings.TrimSpace(in.ScheduledAt) != "" {
 			when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
@@ -259,6 +262,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 			X:                in.X,
 			Instagram:        in.Instagram,
 			TikTok:           in.TikTok,
+			YouTube:          in.YouTube,
 		}
 		if content := strings.TrimSpace(in.Content); content != "" {
 			req.Content = &content

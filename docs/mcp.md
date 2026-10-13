@@ -8,10 +8,10 @@ There are two ways to connect, with the same tools:
 
 | Tool | Endpoint | Arguments |
 | --- | --- | --- |
-| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok` |
+| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok`, `youtube` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
 | `get_post` | `GET /v1/posts/{id}` | post id |
-| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now`, `x`, `instagram`, `tiktok` |
+| `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now`, `x`, `instagram`, `tiktok`, `youtube` |
 | `delete_post` | `DELETE /v1/posts/{id}` | post id |
 | `delete_posts` | `POST /v1/posts/bulk-delete` | `post_ids` (required, up to 100) |
 | `list_accounts` | `GET /v1/accounts` | none |

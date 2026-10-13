@@ -184,7 +184,7 @@ Content and media:
 
 Platform options:
 
-`x`, `instagram` and `tiktok` hold what only that platform has, the same settings as the dashboard composer, checked by the same rules.
+`x`, `instagram`, `tiktok` and `youtube` hold what only that platform has, the same settings as the dashboard composer, checked by the same rules.
 Each needs an account on its platform among the post's accounts.
 
 ```json
@@ -223,9 +223,23 @@ Each needs an account on its platform among the post's accounts.
 | TikTok | `disable_comment`, `disable_duet`, `disable_stitch` | Turn those off |
 | TikTok | `commercial_content`, `your_brand`, `branded_content` | Commercial content disclosure |
 | TikTok | `music_usage_confirmed` | The person agrees to TikTok's Music Usage Confirmation |
+| YouTube | `title` | Up to 100 characters; left out, the first line of `content` |
+| YouTube | `description` | Replaces `content` as the description, up to 5000 bytes |
+| YouTube | `privacy` | `public` (default), `unlisted` or `private` |
+| YouTube | `made_for_kids` | The uploader's declaration that the video is made for children; ask the person |
+| YouTube | `tags` | Up to 500 characters in all, counting a comma between tags and quotes around a tag with a space |
+| YouTube | `category_id` | A YouTube category id, default `22` (People & Blogs); see below |
+| YouTube | `first_comment` | Posted on the video once it is up, up to 10,000 characters; not on a video made for kids |
+| YouTube | `thumbnail_url`, `thumbnail_id` | A JPEG or PNG link, or an upload id, for a custom thumbnail |
 
 TikTok asks for its settings as a set: once any is given, `title`, `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
 Leave `tiktok` out to post with TikTok's defaults.
+
+YouTube refuses `<` and `>` in a title or description, so they are refused here too, including in `content` when it is the description.
+The categories a video can be given are `1` Film & Animation, `2` Autos & Vehicles, `10` Music, `15` Pets & Animals, `17` Sports, `19` Travel & Events, `20` Gaming, `22` People & Blogs, `23` Comedy, `24` Entertainment, `25` News & Politics, `26` Howto & Style, `27` Education, `28` Science & Technology and `29` Nonprofits & Activism.
+A first comment needs the channel to have allowed first comments, which the person does once in the dashboard composer; YouTube only lets verified channels set a custom thumbnail.
+Neither can fail the post: the video is up before either is tried, so a refusal shows as the delivery's `error` on a `published` delivery.
+The same goes for an Instagram first comment.
 
 Response `201 Created`:
 
@@ -252,7 +266,7 @@ Every post, here and from the other endpoints, also carries:
 - `source`: where it was made, `dashboard`, `api` or `mcp`.
 - `created_by` and `updated_by`: `{id, name}` of the person who made it and of whoever last changed it; in a team they can differ.
 - `queue`: `{id, name}` of the queue that chose its time, when one did (`name` is empty once the queue is deleted).
-- `x`, `instagram`, `tiktok`: the platform options it was saved with, when it has any.
+- `x`, `instagram`, `tiktok`, `youtube`: the platform options it was saved with, when it has any (a YouTube thumbnail comes back as `thumbnail_url`).
 
 ### GET /v1/posts
 
@@ -326,7 +340,7 @@ Every field is optional; what is left out keeps its value.
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
 Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
 The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
-`x`, `instagram` and `tiktok` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
+`x`, `instagram`, `tiktok` and `youtube` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
 Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
 A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
 `publish_now: true` publishes straight away after the other changes, for a draft or a scheduled post, and cannot be combined with `scheduled_at`; the post comes back `processing`.

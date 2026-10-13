@@ -46,6 +46,7 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | `x` | X options: `content`, `thread` (`[{content, media_urls, media_ids}]`), `community`, `share_with_followers`, `reply_settings`, `long_post`, `poll` (`{options, duration_minutes}`). |
 | `instagram` | `post_type`, `caption`, `first_comment`, `collaborators`, `user_tags`, `ai_generated`, `trial_reel`. |
 | `tiktok` | `title`, `description`, `privacy`, `disable_comment`, `disable_duet`, `disable_stitch`, `commercial_content`, `your_brand`, `branded_content`, `music_usage_confirmed`. All the required ones or none. |
+| `youtube` | `title`, `description`, `privacy` (`public`, `unlisted`, `private`), `made_for_kids`, `tags`, `category_id`, `first_comment`, `thumbnail_url` or `thumbnail_id`. |
 
 ## Errors
 
