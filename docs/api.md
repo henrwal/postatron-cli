@@ -45,7 +45,9 @@ Revoking a key takes effect immediately.
 A user can hold up to 10 active keys.
 
 API access is included on every paid plan.
-Keys keep working through a cancellation-pending period and stop when the subscription ends (`403 subscription_required`).
+Keys keep working through a cancellation-pending period and stop when the subscription ends.
+Without a plan every endpoint answers `403 subscription_required`, reads included, so nothing is posted, scheduled, sent or uploaded; the error's `details.plans_url` is where to choose one.
+The same goes for the MCP server and the CLI, which use this API.
 
 The remote MCP endpoint also accepts OAuth access tokens (`pto_...`), which MCP clients obtain themselves through the authorisation code flow with PKCE.
 
@@ -137,7 +139,7 @@ Non-2xx responses share one envelope:
 | 401 | `unauthorized` | Missing, malformed, unknown or revoked key |
 | 402 | `quota_exceeded` | Destination-post ceiling reached |
 | 403 | `insufficient_scope` | Key lacks the scope |
-| 403 | `subscription_required` | No active subscription |
+| 403 | `subscription_required` | No active plan; `details.plans_url` is where to choose one |
 | 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team |
 | 404 | `not_found` | Unknown endpoint, post, queue or upload |
 | 409 | `conflict` | The post started publishing, or a queue is paused or full |

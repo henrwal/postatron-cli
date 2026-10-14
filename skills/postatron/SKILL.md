@@ -141,7 +141,7 @@ Use them when the person asks; never add one they did not ask for.
 | `quota_exceeded` | Stop and tell the person: they are at their plan's monthly limit. Do not retry. If `details.resource` is `x_link_posts`, only X posts with a link are capped: offer to post to X without the link, or to the other platforms. |
 | `rate_limited` | Wait for the seconds in `retry_after` (or the `Retry-After` header), then retry once. |
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
-| `subscription_required` | Postatron's API needs a paid plan. Tell the person. |
+| `subscription_required` | The account has no active plan, so nothing can be posted or read. Tell the person and give them the plans link from the message; do not retry. |
 | `workspace_forbidden` | The key or connection works in a team they are no longer on. Tell them to reconnect, or make a key in their own account. |
 
 ## Do not
