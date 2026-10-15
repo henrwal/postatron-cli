@@ -443,7 +443,10 @@ A slot already taken by another scheduled post for the same profile is skipped.
 
 `name` and `timezone` (an IANA name) are required; `profile` defaults to Default.
 Slots are sorted and duplicates dropped.
-Returns `201` with the queue as `GET /v1/queues` shows it; an account holds at most 50 queues (`409`).
+Returns `201` with the queue as `GET /v1/queues` shows it.
+Each plan has a number of queues, paused ones included: Starter 1, Growth 5, Scale as many as you need (up to 50).
+Past it, creating one returns `402 quota_exceeded` with `details.resource` = `queues`.
+After a move to a smaller plan the oldest queues keep working; the rest stop taking posts (`402 quota_exceeded` on `create_post` with `queue`, and `next_slot_error` saying why), while posts they already placed still go out.
 
 ### PATCH /v1/queues/{id}
 
