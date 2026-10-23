@@ -29,7 +29,11 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron get-post <id>` | `GET /v1/posts/{id}` |
 | `postatron delete-post <id>` | `DELETE /v1/posts/{id}` |
 | `postatron delete-posts <id>...` | `POST /v1/posts/bulk-delete` |
+| `postatron update-post <id>` | `PATCH /v1/posts/{id}` |
+| `postatron retry-post <id>` | `POST /v1/posts/{id}/retry` |
+| `postatron list-events` | `GET /v1/events` |
 | `postatron list-accounts` | `GET /v1/accounts` |
+| `postatron connect-account [<platform>]` | `POST /v1/accounts/connect` |
 | `postatron list-profiles` | `GET /v1/profiles` |
 | `postatron list-queues` | `GET /v1/queues` |
 | `postatron create-queue` | `POST /v1/queues` |
@@ -76,7 +80,66 @@ postatron create-post --content "New reel" --platforms instagram --media-urls ht
   --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'
 ```
 
-`update-post` takes the same platform flags; each replaces that platform's options as a whole.
+An account that needs reconnecting is refused with `reconnect_required`; `connect-account --account-id` gives the link that fixes it.
+
+### update-post
+
+Changes a draft or scheduled post, and schedules or publishes a draft.
+
+```bash
+postatron update-post 0AbCdEfGhIjKlMnOpQrS --add-platforms instagram --profile Acme
+postatron update-post 0AbCdEfGhIjKlMnOpQrS --scheduled-at 2026-09-10T10:00:00Z
+postatron update-post 0AbCdEfGhIjKlMnOpQrS --content "New wording" --remove-account-ids 1234567890
+postatron update-post 0AbCdEfGhIjKlMnOpQrS --add-platforms linkedin --publish-now
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--content`, `-c` | New text. |
+| `--scheduled-at` | New RFC 3339 time, at least 5 minutes ahead; schedules a draft. |
+| `--publish-now` | Publish now, after the other changes; not with `--scheduled-at`. |
+| `--add-platforms` | Platforms to add: the account on each in `--profile`. |
+| `--add-account-ids`, `--remove-account-ids` | Specific accounts to add or take off; at least one must remain. |
+| `--profile` | Which profile `--add-platforms` means. |
+
+It takes the same platform flags as `create-post`; each replaces that platform's options as a whole.
+Accounts added count against the monthly quota like a new post.
+
+### retry-post
+
+Sends a failed or partly published post again, to the accounts it failed on only.
+
+```bash
+postatron retry-post 0AbCdEfGhIjKlMnOpQrS
+postatron retry-post 0AbCdEfGhIjKlMnOpQrS --account-ids 1784140000000
+```
+
+An account it already published to is never posted to twice, and a retry is not charged against the quota again.
+`get-post` shows each failure's code in brackets, which says whether a retry can work: `reconnect` needs `connect-account --account-id` first, `media_rejected` and `validation` need a new post (see the API reference's Deliveries section).
+An account that still needs reconnecting is refused, and nothing is sent.
+
+### list-events
+
+The account's event log, newest first: each post's outcome on every account, accounts connected, disconnected or needing a reconnect, and API calls that changed something or were refused.
+
+```bash
+postatron list-events
+postatron list-events --range 24h --status error
+postatron list-events --type posts --platform instagram --range 30d
+```
+
+Flags: `--range` (`24h`, `7d` (default), `30d` or `90d`), `--status` (`ok`, `warning`, `error`), `--type` (`posts`, `accounts`, `api`), `--platform`, `--limit`, `--cursor`.
+`--status` and `--type` take several values separated by commas.
+
+### connect-account
+
+```bash
+postatron connect-account instagram --profile Acme
+postatron connect-account --account-id 1784140000000
+```
+
+Prints a link that connects an account; the person opens it while signed in to Postatron.
+With `--account-id` it signs a connected account in again instead, in its own profile, for one whose access has gone.
 
 ### list-posts
 
@@ -96,6 +159,8 @@ postatron delete-posts 0AbCdEfGhIjKlMnOpQrS 1EfGhIjKlMnOpQrStUvW
 ```
 
 `get-post` shows who created and last changed the post, and the queue it came from.
+A failed account shows its error code in brackets, a published one with a warning says `published (warning)`, and a failed post ends with the `retry-post` command that sends it again.
+A draft that came due without a plan says so, with when it was due.
 `delete-post` cancels a draft or scheduled post.
 A published post is only removed from Postatron and stays live on the platforms; the command says where.
 A post that is publishing, or due within two minutes, prints `Not deleted` with the reason and exits 0.
@@ -162,8 +227,10 @@ postatron get-analytics --range 7d --profile Acme --platform instagram
 postatron get-analytics --source postatron
 ```
 
-Flags: `--range` (`7d`, `30d` or `90d`), `--platform`, `--account-id`, `--profile`, `--source` (`all` or `postatron`).
+Flags: `--range` (`7d`, `30d`, `90d` or `365d`), `--platform`, `--account-id`, `--profile`, `--source` (`all` or `postatron`).
 X is not included, because X bills per read.
+YouTube's numbers are in the per-platform totals, but YouTube's policies keep them out of engagement rates and top posts.
+Each account is read at most once an hour; the report says when it was last read and will be next.
 
 ### create-upload, get-upload
 

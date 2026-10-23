@@ -80,7 +80,11 @@ postatron list-posts --status scheduled
 postatron get-post <id>
 postatron delete-post <id>
 postatron delete-posts <id> <id>
+postatron update-post <id> --add-platforms instagram
+postatron retry-post <id>
+postatron list-events --range 24h --status error
 postatron list-accounts
+postatron connect-account instagram --profile Acme
 postatron list-profiles
 postatron list-queues
 postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,wed 09:00"
@@ -93,6 +97,12 @@ postatron get-upload <id>
 
 Add `--json` to any command for the raw API response.
 Full reference in [docs/cli.md](docs/cli.md).
+
+## When a post fails
+
+Every failed delivery carries an `error_code` that says what to do: `reconnect` (sign the account in again with `connect-account --account-id`, or `connect_account` over MCP), `rate_limited`, `platform_unavailable` and `postatron` (retry), `media_rejected` and `validation` (make a new post with the change), `policy` and `unknown` (read the message).
+`retry-post` (`retry_post`) sends the post again to the accounts it failed on, never to one it already reached, and is not charged again.
+`list-events` (`list_events`) reads the same log as the dashboard's Logs page.
 
 ## Profiles
 

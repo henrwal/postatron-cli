@@ -97,7 +97,7 @@ Use them when the person asks; never add one they did not ask for.
 - **Different wording per platform**: `x.content` replaces the text on X, `instagram.caption` on Instagram. Use these rather than separate posts.
 - **Instagram**: `post_type` (`reel`, `story`, `carousel`, `feed`), `first_comment` (hashtags often go here), `collaborators` (up to 3 usernames), `trial_reel` (`manual` or `performance`).
 - **TikTok**: `title` is a video's caption (up to 2,200) or a photo post's title (up to 90), and `description` a photo post's text (up to 4,000). To publish directly, TikTok needs `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video; `auto_add_music` (photos) and `ai_generated` are optional. Ask the person for privacy and the commercial disclosure, and show them TikTok's declaration, "By posting, you agree to TikTok's Music Usage Confirmation" (with branded content, "...TikTok's Branded Content Policy and Music Usage Confirmation"), before setting `music_usage_confirmed`; never choose those for them. `draft: true`, or leaving `tiktok` out, sends the post to their TikTok inbox to finish in the app instead; a draft takes only `title` and `description` on photos, and nothing on a video.
-- **YouTube**: `title` (up to 100 characters, defaults to the first line), `description` (replaces the text), `privacy` (`public` by default, `unlisted` or `private`), `made_for_kids`, `tags`, `category_id`, `first_comment` and `thumbnail_url`. YouTube asks every uploader whether a video is made for kids: ask the person rather than choosing. No `<` or `>` in a title or description. A first comment needs the channel to have allowed first comments in the dashboard composer, and a custom thumbnail a verified channel; if either is refused the video still goes up and the delivery's `error` says why.
+- **YouTube**: `title` (up to 100 characters, defaults to the first line), `description` (replaces the text), `privacy` (`public` by default, `unlisted` or `private`), `made_for_kids`, `tags`, `category_id` and `thumbnail_url`. YouTube asks every uploader whether a video is made for kids: ask the person rather than choosing. No `<` or `>` in a title or description. `first_comment` is not available on YouTube yet and is refused, so leave it out. A custom thumbnail needs a verified channel; if it is refused the video still goes up, and the delivery is `published` with `warning: true` and an `error` saying why.
 
 `update_post` replaces one platform's options as a whole: send the full set you want, or `{}` to clear them.
 
@@ -115,6 +115,8 @@ Use them when the person asks; never add one they did not ask for.
 | Their posting queues and next free slots | `list_queues` | `list-queues` |
 | What is scheduled | `list_posts` with `status: scheduled` | `list-posts --status scheduled` |
 | Did it go out | `get_post` | `get-post <id>` |
+| What failed recently, and why | `list_events` with `status: error` (`range` 24h, 7d, 30d or 90d) | `list-events --status error` |
+| Send a failed post again | `retry_post` | `retry-post <id>` |
 | Change a draft or scheduled post (text, time, add or drop accounts) | `update_post` | `update-post <id>` |
 | Their drafts | `list_posts` with `status: draft` | `list-posts --status draft` |
 | Send a draft out | `update_post` with `publish_now: true` or `scheduled_at` | `update-post <id> --publish-now` |
@@ -122,10 +124,28 @@ Use them when the person asks; never add one they did not ask for.
 | Delete several posts | `delete_posts` | `delete-posts <id>...` |
 | Set up or change a queue | `create_queue`, `update_queue`, `delete_queue` | `create-queue`, `update-queue`, `delete-queue` |
 | Connect a social account | `connect_account` | `connect-account <platform>` |
-| How posts are doing | `get_analytics` (`range` 7d, 30d or 90d; optional `profile`, `platform`) | `get-analytics` |
+| Sign an account in again | `connect_account` with `account_id` | `connect-account --account-id <id>` |
+| How posts are doing | `get_analytics` (`range` 7d, 30d, 90d or 365d; optional `profile`, `platform`) | `get-analytics` |
 | Quota left this month | `get_usage` | `get-usage` |
 
-- A post's `deliveries` hold one entry per account: `published` with a `url`, or `failed` with an `error`. Report failures account by account; a post can be `partial`.
+- A post's `deliveries` hold one entry per account: `published` with a `url`, or `failed` with an `error` and an `error_code`. Report failures account by account; a post can be `partial`. A `published` delivery with `warning: true` went out, and its `error` is about something after it, such as a first comment; do not call it a failure.
+- A draft with `unpublished.reason` `no_plan` came due while the account had no plan and went back to the drafts. Once there is a plan, offer to schedule or publish it with `update_post`.
+- Analytics: YouTube's numbers are in the per-platform totals, but YouTube's policies keep them out of engagement rates and `top_posts`. Each account is read at most once an hour, so asking again sooner gives the same numbers (`next_sync_at` says when they refresh).
+
+## When a post failed
+
+Read each failed delivery's `error_code`, then:
+
+| `error_code` | What to do |
+| --- | --- |
+| `reconnect` | The account's access has gone. Call `connect_account` with its `account_id`, give the person the `connect_url`, wait for them to say it is done, then offer `retry_post`. |
+| `rate_limited` | The platform asked to slow down. Offer `retry_post` later, not straight away. |
+| `platform_unavailable`, `postatron` | Offer `retry_post`. |
+| `media_rejected`, `validation` | A retry sends the same post and fails the same way. Say what the `error` asks for and offer a new post with the change. |
+| `policy`, `unknown` | Read the `error` to the person; it says what would change it. |
+
+`retry_post` sends the post again only to the accounts it failed on, never to one it already reached, and is not charged against the quota again. Pass `account_ids` to retry some of them. It publishes at once, so confirm first.
+A post or edit to an account that cannot post is refused up front with `reconnect_required`: `details.account_ids` names the accounts, and `connect_account` with each `account_id` fixes it.
 - When the person adds to a post they already scheduled ("put it on Instagram too"), use `update_post` with `add_platforms`, not a second `create_post`: it stays one post, edited and cancelled as one.
 - "Submit my draft to LinkedIn": find it with `list_posts` and `status: draft`, then `update_post` with `add_platforms: ["linkedin"]` and `publish_now: true` (or `scheduled_at` for later). If more than one draft could be the one, show them and ask. Confirm before publishing now: it goes to their real account.
 - When a platform they ask for is not connected, call `connect_account` and give them the `connect_url`. Nothing is connected until they finish signing in there, so wait for them to say so, then check with `list_accounts`.
@@ -143,9 +163,11 @@ Use them when the person asks; never add one they did not ask for.
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
 | `subscription_required` | The account has no active plan, so nothing can be posted or read. Tell the person and give them the plans link from the message; do not retry. |
 | `workspace_forbidden` | The key or connection works in a team they are no longer on. Tell them to reconnect, or make a key in their own account. |
+| `reconnect_required` | An account cannot post until it is signed in again. Call `connect_account` with each id in `details.account_ids`, give the person the link, and try again once they say it is done. |
+| `conflict` | The post is not in a state for that: it already started publishing, or (for `retry_post`) nothing on it failed. Read the message and tell the person. |
 
 ## Do not
 
 - Post to test anything. Every post is real and public on the person's accounts.
-- Retry a `create_post` that may have succeeded (a timeout, for example). Check `list_posts` first, or you publish twice.
+- Retry a `create_post` that may have succeeded (a timeout, for example). Check `list_posts` first, or you publish twice. To send a failed post again, use `retry_post`, never a second `create_post`.
 - Invent account ids or profile names. Use what `list_profiles` returns.

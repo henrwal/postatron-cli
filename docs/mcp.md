@@ -10,12 +10,14 @@ There are two ways to connect, with the same tools:
 | --- | --- | --- |
 | `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok`, `youtube` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
-| `get_post` | `GET /v1/posts/{id}` | post id |
+| `get_post` | `GET /v1/posts/{id}` | `post_id` (required) |
 | `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now`, `x`, `instagram`, `tiktok`, `youtube` |
-| `delete_post` | `DELETE /v1/posts/{id}` | post id |
+| `retry_post` | `POST /v1/posts/{id}/retry` | `post_id` (required), `account_ids` |
+| `delete_post` | `DELETE /v1/posts/{id}` | `post_id` (required) |
 | `delete_posts` | `POST /v1/posts/bulk-delete` | `post_ids` (required, up to 100) |
+| `list_events` | `GET /v1/events` | `range`, `status`, `type`, `platform`, `limit`, `cursor` |
 | `list_accounts` | `GET /v1/accounts` | none |
-| `connect_account` | `POST /v1/accounts/connect` | `platform` (required), `profile` |
+| `connect_account` | `POST /v1/accounts/connect` | `platform`, `profile`, `account_id` (one of `platform` or `account_id`) |
 | `list_profiles` | `GET /v1/profiles` | none |
 | `list_queues` | `GET /v1/queues` | none |
 | `create_queue` | `POST /v1/queues` | `name`, `timezone` (required), `profile`, `slots`, `paused` |
@@ -26,9 +28,16 @@ There are two ways to connect, with the same tools:
 | `create_upload` | `POST /v1/media/uploads` | `purpose` |
 | `get_upload` | `GET /v1/media/uploads/{id}` | `upload_id` |
 
-The post id argument is `post_id` on the remote server and `id` on the local one.
+The nineteen tools, their arguments, descriptions and hints are the same on both servers.
+The local server also takes `id` in place of `post_id` on `get_post` and `delete_post`, the name it used before.
 Tool calls are metered and rate limited exactly like the API (see `docs/api.md`).
 API errors come back as tool errors with the API's `code` and message, so the model can explain a quota or scope problem, or ask which profile you meant, instead of failing silently.
+
+When a post fails, each failed delivery carries an `error_code` that says what to do (the table is in `docs/api.md` under Deliveries).
+`reconnect` means the account's access has gone: `connect_account` with its `account_id` gives the person a link that signs it in again, and `retry_post` then sends the post to the accounts that failed, never to one it already reached.
+A post or edit to such an account is refused up front with `reconnect_required`.
+`list_events` reads the Logs page, for "what failed this week, and why".
+A draft whose `unpublished.reason` is `no_plan` came due while the account had no plan; once there is one, `update_post` schedules or publishes it.
 
 ## Remote
 
@@ -93,7 +102,7 @@ Or build from a checkout: `make build` produces `bin/postatron-mcp` and `bin/pos
 
    If `postatron-mcp` is not on Claude's `PATH`, use the absolute path, for example `/Users/you/go/bin/postatron-mcp`.
 3. Restart Claude Desktop.
-   The tools icon shows `postatron` with ten tools.
+   The tools icon shows `postatron` with nineteen tools.
 
 ### Claude Code
 
@@ -129,8 +138,12 @@ Logs go to stderr; stdout carries the protocol and must stay clean.
 > **You:** Actually cancel that.
 >
 > **Claude** calls `delete_post` with the id and reports `cancelled: true`.
+>
+> **You:** Did yesterday's launch post go out everywhere?
+>
+> **Claude** calls `list_events` with `{"range": "24h", "status": "error"}`, finds the post failed on Instagram with `error_code` `reconnect`, calls `connect_account` with that `account_id` and gives you the link. Once you say it is done, it asks before calling `retry_post`, which sends the post to Instagram only.
 
-Claude asks before running write tools (`create_post`, `update_post`, `delete_post`, `delete_posts`, `delete_queue`) unless you have allowed them for the session.
+Claude asks before running tools that publish or delete (`create_post`, `update_post`, `retry_post`, `delete_post`, `delete_posts`, `delete_queue`) unless you have allowed them for the session.
 
 Deleting a post that has already been published only removes it from Postatron: it stays live on the platforms, and the tool's answer says where.
 

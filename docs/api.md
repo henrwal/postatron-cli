@@ -12,8 +12,10 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `PATCH` | `/v1/posts/{id}` | Change a draft or scheduled post, or publish it now | `posts:write` |
 | `DELETE` | `/v1/posts/{id}` | Delete a post; a published one is only removed from Postatron | `posts:write` |
 | `POST` | `/v1/posts/bulk-delete` | Delete up to 100 posts at once | `posts:write` |
+| `POST` | `/v1/posts/{id}/retry` | Send a failed post again to the accounts it failed on | `posts:write` |
+| `GET` | `/v1/events` | The event log: post outcomes, account changes and API calls | `posts:read` |
 | `GET` | `/v1/accounts` | Connected social accounts and their profiles | `accounts:read` |
-| `POST` | `/v1/accounts/connect` | A link the person opens to connect an account | `accounts:read` |
+| `POST` | `/v1/accounts/connect` | A link the person opens to connect an account, or sign one in again | `accounts:read` |
 | `GET` | `/v1/profiles` | Profiles and the accounts in each | `accounts:read` |
 | `GET` | `/v1/queues` | Posting queues and the next free slot in each | `posts:read` |
 | `POST` | `/v1/queues` | Create a queue | `posts:write` |
@@ -80,7 +82,7 @@ Each tweet of an X thread counts as its own destination-post, and as an X link p
 Links are detected in the post text: `http(s)://` URLs, `www.` hosts and bare domains with a common TLD.
 
 Quota is consumed when the post is created, whether it publishes immediately or later.
-Cancelling a scheduled post does not refund it.
+Cancelling a scheduled post does not refund it, and retrying a failed one (`POST /v1/posts/{id}/retry`) does not charge it again.
 The dashboard and the API share the same counters, and `GET /v1/usage` reports them.
 
 Every plan has a fixed price, so the caps are hard stops on monthly and yearly plans alike; nothing is ever billed on top.
@@ -142,7 +144,8 @@ Non-2xx responses share one envelope:
 | 403 | `subscription_required` | No active plan; `details.plans_url` is where to choose one |
 | 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team |
 | 404 | `not_found` | Unknown endpoint, post, queue or upload |
-| 409 | `conflict` | The post started publishing, or a queue is paused or full |
+| 409 | `conflict` | The post started publishing, a queue is paused or full, or a retry found nothing that failed |
+| 422 | `reconnect_required` | An account the post would go to cannot post until it is connected again; `details.account_ids` names them, and `POST /v1/accounts/connect` with `account_id` gives the link |
 | 422 | `validation_error` | Bad input; `details` says which field |
 | 429 | `rate_limited` | Per-key limit hit; honour `Retry-After` |
 | 500 | `internal_error` | Something broke on our side |
@@ -181,6 +184,7 @@ Content and media:
 - `media_ids`: upload ids from `POST /v1/media/uploads`, for files on someone's own device.
 - Up to four media items across both, and a post cannot mix images and video.
 - Instagram and TikTok need an image or a video; YouTube needs a video.
+- An account that cannot post until it is connected again (`status: "reconnect_required"` in `GET /v1/accounts`) is refused with `422 reconnect_required`, as the dashboard refuses it, rather than accepted only to fail when the post goes out.
 - `scheduled_at` is RFC 3339 and must be at least 5 minutes ahead; omit it to publish now.
 - `queue` (a name or id from `GET /v1/queues`) schedules the post for that queue's next free slot instead; it cannot be combined with `scheduled_at`.
   Every account must be in the queue's profile, and without `profile`, `platforms` means that profile's accounts.
@@ -236,7 +240,7 @@ Each needs an account on its platform among the post's accounts.
 | YouTube | `made_for_kids` | The uploader's declaration that the video is made for children; ask the person |
 | YouTube | `tags` | Up to 500 characters in all, counting a comma between tags and quotes around a tag with a space |
 | YouTube | `category_id` | A YouTube category id, default `22` (People & Blogs); see below |
-| YouTube | `first_comment` | Posted on the video once it is up, up to 10,000 characters; not on a video made for kids |
+| YouTube | `first_comment` | Not available yet: refused until Google verifies the permission it needs |
 | YouTube | `thumbnail_url`, `thumbnail_id` | A JPEG or PNG link, or an upload id, for a custom thumbnail |
 
 A TikTok post is published directly once it has a `privacy`, and TikTok then asks for its settings as a set: `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
@@ -246,8 +250,8 @@ A delivery to the inbox has no `url`, since nothing is public until the creator 
 
 YouTube refuses `<` and `>` in a title or description, so they are refused here too, including in `content` when it is the description.
 The categories a video can be given are `1` Film & Animation, `2` Autos & Vehicles, `10` Music, `15` Pets & Animals, `17` Sports, `19` Travel & Events, `20` Gaming, `22` People & Blogs, `23` Comedy, `24` Entertainment, `25` News & Politics, `26` Howto & Style, `27` Education, `28` Science & Technology and `29` Nonprofits & Activism.
-A first comment needs the channel to have allowed first comments, which the person does once in the dashboard composer; YouTube only lets verified channels set a custom thumbnail.
-Neither can fail the post: the video is up before either is tried, so a refusal shows as the delivery's `error` on a `published` delivery.
+YouTube first comments are switched off for now, so `youtube.first_comment` is refused; YouTube only lets verified channels set a custom thumbnail.
+A thumbnail cannot fail the post: the video is up before it is tried, so a refusal shows as the delivery's `error` on a `published` delivery, with `warning: true`.
 The same goes for an Instagram first comment.
 
 Response `201 Created`:
@@ -276,6 +280,55 @@ Every post, here and from the other endpoints, also carries:
 - `created_by` and `updated_by`: `{id, name}` of the person who made it and of whoever last changed it; in a team they can differ.
 - `queue`: `{id, name}` of the queue that chose its time, when one did (`name` is empty once the queue is deleted).
 - `x`, `instagram`, `tiktok`, `youtube`: the platform options it was saved with, when it has any (a YouTube thumbnail comes back as `thumbnail_url`).
+- `unpublished`: `{reason, due_at}` on a draft that came due and went back to the drafts instead of out.
+  The only reason is `no_plan`: the account had no plan when the post was due.
+  Nothing is lost; once there is a plan, schedule or publish it again with `PATCH /v1/posts/{id}`, which clears `unpublished`.
+
+### Deliveries
+
+Each post has a `deliveries` entry per account:
+
+| Field | Meaning |
+| --- | --- |
+| `account_id`, `platform`, `username` | The account |
+| `status` | `draft` or `scheduled` while the post is (an account is not attempted until the post goes out), then `pending`, `processing`, `published` or `failed` |
+| `url` | The post on the platform, once published (none for a TikTok inbox draft) |
+| `error` | Why it failed, in words for the person; on a `published` delivery, what did not go with it, such as an Instagram first comment or a YouTube thumbnail |
+| `error_code` | On a `failed` delivery, what kind of failure, so an agent can act without reading `error` |
+| `warning` | `true` on a `published` delivery that carries an `error`: the post is live, and the error is about something after it |
+
+What to do about each `error_code`:
+
+| `error_code` | Meaning | What to do |
+| --- | --- | --- |
+| `reconnect` | The account's access has gone | `POST /v1/accounts/connect` with its `account_id`, give the person the link, then retry |
+| `rate_limited` | The platform asked Postatron to slow down, or a daily limit was reached | Retry later |
+| `platform_unavailable` | The platform failed or timed out | Retry |
+| `postatron` | Something went wrong on Postatron's side | Retry |
+| `media_rejected` | The platform would not take the image or video | A retry sends the same file; make a new post with another |
+| `validation` | The post breaks a platform rule, such as a duplicate or a caption too long | Make a new post with the change |
+| `policy` | The platform's rules refused it, such as TikTok posting only to private accounts for an unaudited app, or there was no plan when a retry ran | `error` says what would change it |
+| `unknown` | A refusal Postatron does not recognise | `error` has the platform's words |
+
+### POST /v1/posts/{id}/retry
+
+Sends a `failed` or `partial` post again, to the accounts it failed on only.
+An account it already published to is never posted to twice.
+
+```json
+{ "account_ids": ["1784140000000"] }
+```
+
+The body is optional: without `account_ids`, every account that failed goes again.
+The response is the post, now `processing`, with the retried deliveries `pending` (`202 Accepted`); poll `GET /v1/posts/{id}` for the outcome, which also appears in `GET /v1/events`.
+A retry is not counted against the monthly quota again: the destination-post was counted when the post was made.
+
+Refusals:
+
+- `409 conflict` when the post is not `failed` or `partial`, nothing on it failed, or a named account published (`details.reason` is `not_retryable` or `not_failed`).
+- `422 validation_error` when a named account is not on the post.
+- `422 reconnect_required` when an account to retry cannot post until it is connected again, or is no longer connected; `details.account_ids` names them.
+  Nothing is sent while any of them would only fail again.
 
 ### GET /v1/posts
 
@@ -299,7 +352,7 @@ Response:
 
 ### GET /v1/posts/{id}
 
-Returns the post with a `deliveries` entry per account: `status` (`pending`, `processing`, `published`, `failed`), `url` when published and `error` when failed.
+Returns the post with a `deliveries` entry per account (see [Deliveries](#deliveries)).
 Unknown ids return `404`.
 
 ### DELETE /v1/posts/{id}
@@ -349,6 +402,7 @@ Every field is optional; what is left out keeps its value.
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
 Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
 The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
+Unless the post stays a draft, an account that cannot post until it is connected again is refused with `422 reconnect_required`.
 `x`, `instagram`, `tiktok` and `youtube` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
 Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
 A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
@@ -371,7 +425,16 @@ Returns a link that connects one of your social accounts.
 The link opens Postatron and starts that platform's sign-in; nothing is connected until the person finishes it there.
 It only works for the person whose key asked for it: signed in as someone else, the page refuses it.
 A team workspace key's link also opens the dashboard in that workspace.
-A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link.
+A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link, and a profile that already has an account on that platform gets `409 conflict`.
+
+To sign in again an account whose access has gone (`reconnect_required`, or a delivery with `error_code: "reconnect"`), pass its `account_id`; `platform` can then be left out.
+
+```json
+{ "account_id": "1784140000000" }
+```
+
+The link signs that account in again where it is, in its own profile, and does not count against the allowance.
+Asking for a `platform` whose account in `profile` needs reconnecting does the same.
 
 ### GET /v1/accounts
 
@@ -392,7 +455,8 @@ A plan whose account allowance is used up gets `402 quota_exceeded` instead of a
 }
 ```
 
-`status` is `connected` or `reconnect_required` (token missing or expired without a refresh token).
+`status` is `connected` or `reconnect_required`: no sign-in stored, one the platform has refused, or one expired with nothing to renew it.
+A post to a `reconnect_required` account is refused; `POST /v1/accounts/connect` with its `account_id` gives the link that fixes it.
 
 ### GET /v1/profiles
 
@@ -485,7 +549,7 @@ The numbers behind the dashboard's Analytics page.
 
 | Parameter | Values |
 | --- | --- |
-| `range` | `7d`, `30d` (default) or `90d` |
+| `range` | `7d`, `30d` (default), `90d` or `365d` |
 | `platform` | Only this platform |
 | `account_id` | Only this connected account |
 | `profile` | Only accounts in this profile (id or name) |
@@ -499,13 +563,58 @@ The numbers behind the dashboard's Analytics page.
   "top_posts": [ { "platform": "instagram", "url": "https://instagram.com/p/...", "likes": 210, "clicks": null, "engagement": 260, "posted_with_postatron": true, "...": "..." } ],
   "accounts": [ { "id": "abc", "platform": "instagram", "username": "acme", "followers": 3900, "supported": true, "status": "ok" } ],
   "generated_at": "2026-10-06T08:00:00Z",
+  "last_sync_at": "2026-10-06T07:31:00Z",
+  "next_sync_at": "2026-10-06T08:31:00Z",
   "notes": ["X is not included: X bills per read, so Postatron does not fetch X analytics."]
 }
 ```
 
 A metric a platform does not report is `null`, never a negative number.
 `top_posts` holds at most ten posts.
-Numbers are cached for up to an hour per account.
+YouTube's numbers are in `per_platform` as YouTube reports them, but YouTube's API policies keep them out of engagement totals, engagement rates and `top_posts`.
+Each account is read from its platform at most once an hour: `last_sync_at` is when the oldest numbers were read and `next_sync_at` when they will be read again, so asking sooner returns the same report.
+
+### GET /v1/events
+
+The account's event log, newest first: the dashboard's Logs page.
+Each post's outcome on every account it went to, accounts connected, disconnected or needing a reconnect, and calls to the API or MCP that changed something or were refused.
+Events are kept for 90 days.
+
+| Parameter | Values |
+| --- | --- |
+| `range` | `24h`, `7d` (default), `30d` or `90d`, ending now |
+| `status` | `ok`, `warning` or `error`; several separated by commas |
+| `type` | `posts`, `accounts` or `api`; several separated by commas |
+| `platform` | Only events about an account on this platform |
+| `limit` | 1 to 100, default 25 |
+| `cursor` | `next_cursor` from the previous page |
+
+```json
+{
+  "data": [
+    {
+      "id": "0001792922400123456789ab12cd34",
+      "at": "2026-10-22T09:00:00Z",
+      "kind": "post.partial",
+      "status": "error",
+      "source": "mcp",
+      "post_id": "0AbCdEfGhIjKlMnOpQrS",
+      "excerpt": "Launch day",
+      "message": "Failed on 1 of 2 accounts.",
+      "accounts": [
+        { "id": "1234567890", "platform": "x", "username": "acmehq", "status": "ok", "url": "https://x.com/acmehq/status/1" },
+        { "id": "1784140000000", "platform": "instagram", "username": "acme", "status": "error", "message": "Instagram no longer accepts Postatron's access...", "error_code": "reconnect" }
+      ]
+    }
+  ],
+  "next_cursor": "0001792922300..."
+}
+```
+
+`kind` is `post.published`, `post.partial`, `post.failed`, `post.unpublished` (came due without a plan), `account.connected`, `account.disconnected` (with `reason`: `user`, `expired` or `revoked`), `account.needs_attention` (with `at_risk` and `at_risk_count`, the scheduled posts it will fail) or `api.request` (with `request`: `method`, `path`, `status_code`, `code`, `duration_ms`, `tool`, `key_name`).
+A failed account carries `error_code`, as a delivery does.
+A team workspace key sees what the Logs page shows that member: events about their profiles, and what they did themselves.
+It takes the `posts:read` scope.
 
 ### POST /v1/media/uploads
 
