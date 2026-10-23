@@ -79,6 +79,8 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newDeletePostCommand(g),
 		newDeletePostsCommand(g),
 		newUpdatePostCommand(g),
+		newRetryPostCommand(g),
+		newListEventsCommand(g),
 		newListAccountsCommand(g),
 		newConnectAccountCommand(g),
 		newListProfilesCommand(g),
@@ -339,6 +341,63 @@ func newDeletePostCommand(g *globals) *cobra.Command {
 	}
 }
 
+func newRetryPostCommand(g *globals) *cobra.Command {
+	var accountIDs []string
+	cmd := &cobra.Command{
+		Use:   "retry-post <id>",
+		Short: "Send a failed or partial post again to the accounts it failed on",
+		Long: "Send a failed or partial post again to the accounts it failed on, or to --account-ids of them. " +
+			"An account it already published to is never posted to twice, and a retry is not charged again. " +
+			"An account whose access has gone is refused; connect-account --account-id gives a link that signs it in again.",
+		Example: `  postatron retry-post 01J9Z0ABCDEF
+  postatron retry-post 01J9Z0ABCDEF --account-ids 1784140000000`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			post, err := g.ops().RetryPost(cmd.Context(), args[0], apiv1.RetryPostRequest{AccountIDs: accountIDs})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, post)
+			}
+			printPost(g.out, *post)
+			fmt.Fprintf(g.out, "\nSending again. Check with: postatron get-post %s\n", post.ID)
+			return nil
+		},
+	}
+	cmd.Flags().StringSliceVar(&accountIDs, "account-ids", nil, "only these failed accounts (comma-separated); default every one that failed")
+	return cmd
+}
+
+func newListEventsCommand(g *globals) *cobra.Command {
+	var query apiv1.ListEventsQuery
+	cmd := &cobra.Command{
+		Use:   "list-events",
+		Short: "Show the account's event log: post outcomes, account changes and API calls, newest first",
+		Example: `  postatron list-events
+  postatron list-events --range 24h --status error
+  postatron list-events --type posts --platform instagram --range 30d`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			list, err := g.ops().ListEvents(cmd.Context(), query)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, list)
+			}
+			printEvents(g.out, *list)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&query.Range, "range", "", "24h, 7d, 30d or 90d (default 7d)")
+	cmd.Flags().StringVar(&query.Status, "status", "", "ok, warning or error (comma-separated for several)")
+	cmd.Flags().StringVar(&query.Type, "type", "", "posts, accounts or api (comma-separated for several)")
+	cmd.Flags().StringVar(&query.Platform, "platform", "", "only events about an account on this platform")
+	cmd.Flags().IntVar(&query.Limit, "limit", 0, "page size, 1-100 (default 25)")
+	cmd.Flags().StringVar(&query.Cursor, "cursor", "", "next_cursor from a previous page")
+	return cmd
+}
+
 func newDeletePostsCommand(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete-posts <id> [<id>...]",
@@ -421,15 +480,23 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 }
 
 func newConnectAccountCommand(g *globals) *cobra.Command {
-	var profile string
+	var profile, accountID string
 	cmd := &cobra.Command{
-		Use:   "connect-account <platform>",
-		Short: "Get a link that connects a social account (x, instagram, linkedin, ...)",
+		Use:   "connect-account [<platform>]",
+		Short: "Get a link that connects a social account (x, instagram, linkedin, ...), or signs one in again",
 		Example: `  postatron connect-account x
-  postatron connect-account instagram --profile Acme`,
-		Args: cobra.ExactArgs(1),
+  postatron connect-account instagram --profile Acme
+  postatron connect-account --account-id 1784140000000`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			link, err := g.ops().ConnectAccount(cmd.Context(), apiv1.ConnectAccountRequest{Platform: args[0], Profile: profile})
+			req := apiv1.ConnectAccountRequest{Profile: profile, AccountID: strings.TrimSpace(accountID)}
+			if len(args) == 1 {
+				req.Platform = args[0]
+			}
+			if req.Platform == "" && req.AccountID == "" {
+				return usageError("name a platform, or --account-id to sign a connected account in again")
+			}
+			link, err := g.ops().ConnectAccount(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -444,6 +511,7 @@ func newConnectAccountCommand(g *globals) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&profile, "profile", "", "profile name or id to put the account in")
+	cmd.Flags().StringVar(&accountID, "account-id", "", "a connected account's id, to sign it in again where it is")
 	return cmd
 }
 
@@ -745,7 +813,7 @@ func newGetAnalyticsCommand(g *globals) *cobra.Command {
 	var query apiv1.AnalyticsQuery
 	cmd := &cobra.Command{
 		Use:   "get-analytics",
-		Short: "Show post performance and audience for a 7, 30 or 90 day window",
+		Short: "Show post performance and audience for a 7, 30, 90 or 365 day window",
 		Example: `  postatron get-analytics --range 7d
   postatron get-analytics --profile Acme --platform instagram`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -760,7 +828,7 @@ func newGetAnalyticsCommand(g *globals) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&query.Range, "range", "", "7d, 30d or 90d (default 30d)")
+	cmd.Flags().StringVar(&query.Range, "range", "", "7d, 30d, 90d or 365d (default 30d)")
 	cmd.Flags().StringVar(&query.Platform, "platform", "", "only this platform")
 	cmd.Flags().StringVar(&query.AccountID, "account-id", "", "only this connected account")
 	cmd.Flags().StringVar(&query.Profile, "profile", "", "only accounts in this profile (name or id)")
@@ -812,18 +880,76 @@ func printPost(w io.Writer, p apiv1.Post) {
 		}
 		fmt.Fprintf(w, "Queue:     %s\n", name)
 	}
+	if u := p.Unpublished; u != nil {
+		fmt.Fprintf(w, "Not published: it was due %s, but %s, so it went back to the drafts.\n", u.DueAt.UTC().Format(time.RFC3339), unpublishedReason(u.Reason))
+	}
 	fmt.Fprintf(w, "Content:   %s\n", oneLine(p.Content))
 	if len(p.Deliveries) > 0 {
 		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(tw, "PLATFORM\tACCOUNT\tSTATUS\tURL / ERROR")
+		failed := false
 		for _, d := range p.Deliveries {
 			detail := d.URL
-			if d.Error != "" {
+			status := d.Status
+			switch {
+			case d.Warning:
+				status += " (warning)"
+				detail = strings.TrimSpace(d.URL + " " + d.Error)
+			case d.Error != "":
 				detail = d.Error
+				if d.ErrorCode != "" {
+					detail = "[" + d.ErrorCode + "] " + d.Error
+				}
 			}
-			fmt.Fprintf(tw, "%s\t@%s\t%s\t%s\n", d.Platform, d.Username, d.Status, detail)
+			if d.Status == apiv1.StatusFailed {
+				failed = true
+			}
+			fmt.Fprintf(tw, "%s\t@%s\t%s\t%s\n", d.Platform, d.Username, status, detail)
 		}
 		_ = tw.Flush()
+		if failed && (p.Status == apiv1.StatusFailed || p.Status == apiv1.StatusPartial) {
+			fmt.Fprintf(w, "\nTo send it again where it failed: postatron retry-post %s\n", p.ID)
+		}
+	}
+}
+
+func unpublishedReason(reason string) string {
+	if reason == apiv1.UnpublishedNoPlan {
+		return "the account had no plan then"
+	}
+	return reason
+}
+
+func printEvents(w io.Writer, list apiv1.EventList) {
+	if len(list.Data) == 0 {
+		fmt.Fprintln(w, "No events found.")
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(tw, "WHEN\tSTATUS\tEVENT\tPOST\tDETAIL")
+	for _, e := range list.Data {
+		detail := e.Message
+		if r := e.Request; r != nil {
+			detail = strings.TrimSpace(fmt.Sprintf("%s %s %d %s", r.Method, r.Path, r.StatusCode, e.Message))
+		}
+		if detail == "" {
+			detail = e.Excerpt
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.At.UTC().Format("2006-01-02 15:04"), e.Status, e.Kind, e.PostID, truncate(oneLine(detail), 70))
+		for _, a := range e.Accounts {
+			if a.Status != apiv1.EventStatusError {
+				continue
+			}
+			code := ""
+			if a.ErrorCode != "" {
+				code = "[" + a.ErrorCode + "] "
+			}
+			fmt.Fprintf(tw, "\t\t  %s\t\t%s%s\n", a.Platform, code, truncate(oneLine(a.Message), 70))
+		}
+	}
+	_ = tw.Flush()
+	if list.NextCursor != "" {
+		fmt.Fprintf(w, "\nMore results: --cursor %s\n", list.NextCursor)
 	}
 }
 
@@ -915,6 +1041,9 @@ func printAnalytics(w io.Writer, r apiv1.AnalyticsReport) {
 			fmt.Fprintf(tw, "  %s\t%s\t%d\t%s\n", p.Platform, dateOf(p.PublishedAt), p.Engagement, truncate(oneLine(p.Text), 50))
 		}
 		_ = tw.Flush()
+	}
+	if r.LastSyncAt != "" && r.NextSyncAt != "" {
+		fmt.Fprintf(w, "\nLast read from the platforms %s; next %s.\n", r.LastSyncAt, r.NextSyncAt)
 	}
 	for _, note := range r.Notes {
 		fmt.Fprintf(w, "\nNote: %s", note)

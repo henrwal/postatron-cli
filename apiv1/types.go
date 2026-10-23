@@ -38,6 +38,42 @@ const (
 	CodeValidation         = "validation_error"
 	CodeNotFound           = "not_found"
 	CodeInternal           = "internal_error"
+	// CodeReconnectRequired means an account the request would post to cannot
+	// post until the person connects it again (ConnectAccount). Details name
+	// the accounts in account_ids.
+	CodeReconnectRequired = "reconnect_required"
+	// CodeConflict means the post is not in a state the request can act on,
+	// such as editing a post already published or retrying one that did not
+	// fail.
+	CodeConflict = "conflict"
+)
+
+// Delivery error codes: why one account of a post failed (Delivery.ErrorCode),
+// and so what to do about it.
+const (
+	// ErrorReconnect: the account's access is gone. Connect it again
+	// (ConnectAccount), then RetryPost.
+	ErrorReconnect = "reconnect"
+	// ErrorRateLimited: the platform asked Postatron to slow down, or a daily
+	// limit was reached. RetryPost later.
+	ErrorRateLimited = "rate_limited"
+	// ErrorPlatformUnavailable: the platform failed or timed out. RetryPost.
+	ErrorPlatformUnavailable = "platform_unavailable"
+	// ErrorMediaRejected: the platform would not take the image or video. A
+	// retry sends the same file; make a new post with another.
+	ErrorMediaRejected = "media_rejected"
+	// ErrorPolicy: the platform's rules refused it, such as TikTok posting
+	// only to private accounts for an unaudited app, or the account had no
+	// plan when a retry ran. Error says what would change it.
+	ErrorPolicy = "policy"
+	// ErrorValidation: the post breaks a platform rule, such as a caption
+	// that is too long or a duplicate. Make a new post with the change.
+	ErrorValidation = "validation"
+	// ErrorPostatron: something went wrong on Postatron's side. RetryPost.
+	ErrorPostatron = "postatron"
+	// ErrorUnknown: a refusal Postatron does not recognise; Error has the
+	// platform's words.
+	ErrorUnknown = "unknown"
 )
 
 // ErrorBody is the JSON envelope for every non-2xx response.
@@ -290,6 +326,12 @@ type ConnectAccountRequest struct {
 	Platform string `json:"platform"`
 	// Profile is the profile (name or id) the new account goes into.
 	Profile string `json:"profile,omitempty"`
+	// AccountID signs a connected account in again instead, for one whose
+	// access has gone (status reconnect_required, or a failed delivery with
+	// error_code reconnect). It keeps its profile, and Platform may be left
+	// out. Asking for a platform whose account in Profile needs reconnecting
+	// does the same.
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // ConnectLink is a link the person opens to connect a social account. It
@@ -302,7 +344,9 @@ type ConnectLink struct {
 	Hint       string `json:"hint"`
 }
 
-// Delivery is the per-platform state of a post.
+// Delivery is the per-platform state of a post. Status is one of draft,
+// scheduled, pending, processing, published or failed: a draft's or a
+// scheduled post's accounts read as the post does until it is sent.
 type Delivery struct {
 	AccountID string `json:"account_id"`
 	Platform  string `json:"platform"`
@@ -311,8 +355,35 @@ type Delivery struct {
 	URL       string `json:"url,omitempty"`
 	// Error says why a delivery failed. On a published one it says what
 	// did not go through after the post itself, such as a first comment or
-	// a YouTube thumbnail.
+	// a YouTube thumbnail, and Warning is true.
 	Error string `json:"error,omitempty"`
+	// ErrorCode is why a failed delivery failed, one of the Error* codes,
+	// so an agent can act on it without reading Error. Empty unless failed.
+	ErrorCode string `json:"error_code,omitempty"`
+	// Warning is true on a published delivery that carries an Error: the
+	// post is live, and Error is about something after it.
+	Warning bool `json:"warning,omitempty"`
+}
+
+// Unpublished reasons for PostUnpublished.Reason.
+const (
+	// UnpublishedNoPlan: the post came due while the account had no plan,
+	// so it went back to the drafts instead of out.
+	UnpublishedNoPlan = "no_plan"
+)
+
+// PostUnpublished is set on a draft that came due and went back to the
+// drafts instead of out. Scheduling or publishing it again clears it.
+type PostUnpublished struct {
+	Reason string    `json:"reason"`
+	DueAt  time.Time `json:"due_at"`
+}
+
+// RetryPostRequest is the optional body of POST /v1/posts/{id}/retry.
+// AccountIDs names the failed accounts to send again; empty sends every one
+// that failed. Accounts that published are never sent again.
+type RetryPostRequest struct {
+	AccountIDs []string `json:"account_ids,omitempty"`
 }
 
 // Post is the API representation of a post.
@@ -335,6 +406,9 @@ type Post struct {
 	UpdatedBy *PostAuthor `json:"updated_by,omitempty"`
 	// Queue is the queue that chose the post's time, when one did.
 	Queue *PostQueue `json:"queue,omitempty"`
+	// Unpublished is set on a draft that came due without a plan and went
+	// back to the drafts: why, and when it was due.
+	Unpublished *PostUnpublished `json:"unpublished,omitempty"`
 	// The platform options the post was saved with, when it has any.
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
@@ -562,9 +636,17 @@ type UsageRateLimits struct {
 	WritesPerHour int `json:"writes_per_hour"`
 }
 
+// Analytics ranges for AnalyticsQuery.Range.
+const (
+	Range7d   = "7d"
+	Range30d  = "30d"
+	Range90d  = "90d"
+	Range365d = "365d"
+)
+
 // AnalyticsQuery holds the filters accepted by GET /v1/analytics.
 type AnalyticsQuery struct {
-	// Range is 7d, 30d or 90d (default 30d).
+	// Range is 7d, 30d, 90d or 365d (default 30d).
 	Range string
 	// Platform limits the report to one platform, e.g. instagram.
 	Platform string
@@ -586,6 +668,12 @@ type AnalyticsReport struct {
 	Accounts    []AnalyticsAccount     `json:"accounts"`
 	GeneratedAt string                 `json:"generated_at"`
 	Notes       []string               `json:"notes,omitempty"`
+	// LastSyncAt is when the oldest numbers in the report were read from a
+	// platform, and NextSyncAt when they will next be read (RFC 3339).
+	// Each account is read at most once an hour; asking sooner returns the
+	// same numbers.
+	LastSyncAt string `json:"last_sync_at,omitempty"`
+	NextSyncAt string `json:"next_sync_at,omitempty"`
 }
 
 // AnalyticsRange is the window the report covers.
@@ -665,6 +753,111 @@ type Upload struct {
 	Hint      string `json:"hint,omitempty"`
 }
 
+// Event statuses, types and ranges for ListEventsQuery.
+const (
+	EventStatusOK      = "ok"
+	EventStatusWarning = "warning"
+	EventStatusError   = "error"
+
+	EventTypePosts    = "posts"
+	EventTypeAccounts = "accounts"
+	EventTypeAPI      = "api"
+
+	EventRange24h = "24h"
+	EventRange7d  = "7d"
+	EventRange30d = "30d"
+	EventRange90d = "90d"
+)
+
+// ListEventsQuery holds the filters accepted by GET /v1/events. Status, Type
+// and Platform take one value or several separated by commas.
+type ListEventsQuery struct {
+	// Range is 24h, 7d (the default), 30d or 90d, ending now. Events are
+	// kept for 90 days.
+	Range string
+	// Status is ok, warning or error.
+	Status string
+	// Type is posts, accounts or api.
+	Type string
+	// Platform keeps events about an account on that platform, e.g. instagram.
+	Platform string
+	Limit    int
+	Cursor   string
+}
+
+// Event is one thing that happened in the account, newest first in
+// EventList: a post's outcome on every account it went to, an account
+// connected, disconnected or needing a reconnect, or a call to the API or
+// MCP that changed something or was refused. It is the dashboard's Logs page.
+type Event struct {
+	ID string    `json:"id"`
+	At time.Time `json:"at"`
+	// Kind is post.published, post.partial, post.failed, post.unpublished,
+	// account.connected, account.disconnected, account.needs_attention or
+	// api.request.
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+	// Source is where a post or request came from: dashboard, api or mcp.
+	// Empty for what Postatron did by itself.
+	Source string `json:"source,omitempty"`
+	// ActorID is the person behind it: the owner, or a team member.
+	ActorID    string   `json:"actor_id,omitempty"`
+	ProfileIDs []string `json:"profile_ids,omitempty"`
+	PostID     string   `json:"post_id,omitempty"`
+	// Excerpt is the start of the post's text.
+	Excerpt  string         `json:"excerpt,omitempty"`
+	Message  string         `json:"message,omitempty"`
+	Accounts []EventAccount `json:"accounts,omitempty"`
+	Request  *EventRequest  `json:"request,omitempty"`
+	// Reason is why an account was disconnected: user, expired or revoked.
+	Reason string `json:"reason,omitempty"`
+	// AtRisk are the scheduled posts an account problem will stop going out,
+	// soonest first and at most ten, and AtRiskCount how many there are.
+	AtRisk      []EventPostRef `json:"at_risk,omitempty"`
+	AtRiskCount int            `json:"at_risk_count,omitempty"`
+}
+
+// EventAccount is an account an event concerns. On a post's outcome it is
+// one delivery, with its own status, message and link.
+type EventAccount struct {
+	ID       string `json:"id"`
+	Platform string `json:"platform"`
+	Username string `json:"username,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Message  string `json:"message,omitempty"`
+	URL      string `json:"url,omitempty"`
+	// ErrorCode is a failed delivery's code, as on Delivery.
+	ErrorCode string `json:"error_code,omitempty"`
+}
+
+// EventRequest is the API or MCP call behind an api.request event.
+type EventRequest struct {
+	Method     string `json:"method"`
+	Path       string `json:"path"`
+	StatusCode int    `json:"status_code"`
+	// Code is the API's error code on a refusal.
+	Code       string `json:"code,omitempty"`
+	DurationMs int64  `json:"duration_ms"`
+	// Tool is the MCP tool that made the call.
+	Tool string `json:"tool,omitempty"`
+	// KeyName names the API key or connected app that called.
+	KeyName string `json:"key_name,omitempty"`
+}
+
+// EventPostRef is a scheduled post an account problem puts at risk.
+type EventPostRef struct {
+	ID      string    `json:"id"`
+	At      time.Time `json:"at"`
+	Excerpt string    `json:"excerpt,omitempty"`
+}
+
+// EventList is the response of GET /v1/events.
+type EventList struct {
+	Data       []Event `json:"data"`
+	NextCursor string  `json:"next_cursor,omitempty"`
+}
+
 // Operations is the public API surface. Client implements it over HTTP; the
 // MCP server and CLI consume it.
 type Operations interface {
@@ -674,6 +867,8 @@ type Operations interface {
 	UpdatePost(ctx context.Context, id string, req UpdatePostRequest) (*Post, error)
 	DeletePost(ctx context.Context, id string) (*DeletePostResponse, error)
 	DeletePosts(ctx context.Context, req DeletePostsRequest) (*DeletePostsResponse, error)
+	RetryPost(ctx context.Context, id string, req RetryPostRequest) (*Post, error)
+	ListEvents(ctx context.Context, query ListEventsQuery) (*EventList, error)
 	ListAccounts(ctx context.Context) (*AccountList, error)
 	ConnectAccount(ctx context.Context, req ConnectAccountRequest) (*ConnectLink, error)
 	ListProfiles(ctx context.Context) (*ProfileList, error)

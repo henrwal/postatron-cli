@@ -48,6 +48,12 @@ func TestClientRoundTrips(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(apiv1.Upload{ID: "u1", Status: "READY"})
 		case r.URL.Path == "/v1/usage":
 			_ = json.NewEncoder(w).Encode(apiv1.UsageReport{Plan: apiv1.UsagePlan{Code: "STARTER"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/posts/p1/retry":
+			var in apiv1.RetryPostRequest
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			_ = json.NewEncoder(w).Encode(apiv1.Post{ID: "p1", Status: apiv1.StatusProcessing, Deliveries: []apiv1.Delivery{{AccountID: in.AccountIDs[0], Status: apiv1.StatusPending}}})
+		case r.URL.Path == "/v1/events":
+			_ = json.NewEncoder(w).Encode(apiv1.EventList{Data: []apiv1.Event{{ID: "e1", Kind: "post.failed", Status: apiv1.EventStatusError}}, NextCursor: "e0"})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -109,6 +115,33 @@ func TestClientRoundTrips(t *testing.T) {
 	usage, err := client.GetUsage(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "STARTER", usage.Plan.Code)
+
+	retried, err := client.RetryPost(ctx, "p1", apiv1.RetryPostRequest{AccountIDs: []string{"ig1"}})
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.StatusProcessing, retried.Status)
+	assert.Equal(t, "ig1", retried.Deliveries[0].AccountID)
+	assert.Equal(t, http.MethodPost, gotMethod)
+
+	events, err := client.ListEvents(ctx, apiv1.ListEventsQuery{Range: "24h", Status: "error", Type: "posts", Limit: 5})
+	require.NoError(t, err)
+	assert.Equal(t, "e0", events.NextCursor)
+	assert.Equal(t, "limit=5&range=24h&status=error&type=posts", gotQuery)
+}
+
+// The fields added for failures read back as an agent sees them.
+func TestDeliveryAndPostCarryWhyTheyFailed(t *testing.T) {
+	due := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
+	raw, err := json.Marshal(apiv1.Post{ID: "p1", Unpublished: &apiv1.PostUnpublished{Reason: apiv1.UnpublishedNoPlan, DueAt: due},
+		Deliveries: []apiv1.Delivery{
+			{AccountID: "ig1", Status: apiv1.StatusFailed, Error: "Reconnect it.", ErrorCode: apiv1.ErrorReconnect},
+			{AccountID: "yt1", Status: apiv1.StatusPublished, Error: "The thumbnail was not set.", Warning: true},
+			{AccountID: "x1", Status: apiv1.StatusPublished},
+		}})
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"unpublished":{"reason":"no_plan","due_at":"2026-10-20T09:00:00Z"}`)
+	assert.Contains(t, string(raw), `"error_code":"reconnect"`)
+	assert.Contains(t, string(raw), `"warning":true`)
+	assert.Contains(t, string(raw), `{"account_id":"x1","platform":"","username":"","status":"published"}`, "a clean delivery carries neither")
 }
 
 func TestClientDecodesErrors(t *testing.T) {

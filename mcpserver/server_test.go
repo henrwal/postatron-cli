@@ -29,6 +29,22 @@ type fakeOps struct {
 	queues   []apiv1.CreateQueueRequest
 	edits    map[string]apiv1.UpdateQueueRequest
 	dropped  []string
+	retried  map[string][]string
+	events   []apiv1.ListEventsQuery
+}
+
+func (f *fakeOps) RetryPost(_ context.Context, id string, req apiv1.RetryPostRequest) (*apiv1.Post, error) {
+	if f.retried == nil {
+		f.retried = map[string][]string{}
+	}
+	f.retried[id] = req.AccountIDs
+	return &apiv1.Post{ID: id, Status: apiv1.StatusProcessing, Deliveries: []apiv1.Delivery{{Platform: "instagram", Status: apiv1.StatusPending}}}, nil
+}
+
+func (f *fakeOps) ListEvents(_ context.Context, q apiv1.ListEventsQuery) (*apiv1.EventList, error) {
+	f.events = append(f.events, q)
+	return &apiv1.EventList{Data: []apiv1.Event{{ID: "e1", Kind: "post.failed", Status: apiv1.EventStatusError, PostID: "p1",
+		Accounts: []apiv1.EventAccount{{ID: "ig1", Platform: "instagram", Status: apiv1.EventStatusError, Message: "Reconnect it.", ErrorCode: apiv1.ErrorReconnect}}}}}, nil
 }
 
 func (f *fakeOps) DeletePosts(_ context.Context, req apiv1.DeletePostsRequest) (*apiv1.DeletePostsResponse, error) {
@@ -160,7 +176,7 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		assert.Equal(t, tool.Title, tool.Annotations.Title, tool.Name)
 		isRead := strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "get_")
 		assert.Equal(t, isRead, tool.Annotations.ReadOnlyHint, tool.Name)
-		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "delete_posts" || tool.Name == "update_post" || tool.Name == "delete_queue" {
+		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "delete_posts" || tool.Name == "update_post" || tool.Name == "delete_queue" || tool.Name == "retry_post" {
 			require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
 			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes or deletes on real accounts", tool.Name)
 		}
@@ -168,7 +184,7 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"create_post", "list_posts", "get_post", "delete_post", "update_post", "connect_account", "list_accounts", "list_profiles",
 		"list_queues", "get_usage", "get_analytics", "create_upload", "get_upload",
-		"delete_posts", "create_queue", "update_queue", "delete_queue",
+		"delete_posts", "create_queue", "update_queue", "delete_queue", "retry_post", "list_events",
 	}, names)
 }
 
@@ -281,8 +297,43 @@ func TestReadToolsAndErrors(t *testing.T) {
 	assert.True(t, res.IsError, "transport failures surface as tool errors")
 	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "network down")
 
-	_, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_post", Arguments: map[string]any{}})
-	require.Error(t, err, "missing required id fails schema validation")
+	// post_id is the remote server's name; id, the old name here, still works.
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_post", Arguments: map[string]any{"post_id": "p3"}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_post", Arguments: map[string]any{"post_id": "p10"}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, []string{"p9", "p10"}, ops.deleted)
+	assert.Equal(t, []string{"missing", "p3"}, ops.fetched)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_post", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	assert.True(t, res.IsError, "a post id is required by one name or the other")
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, "post_id is required")
+}
+
+func TestRetryPostAndListEvents(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "retry_post", Arguments: map[string]any{"post_id": "p1", "account_ids": []any{"ig1"}}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, map[string][]string{"p1": {"ig1"}}, ops.retried)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"status":"processing"`)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "list_events", Arguments: map[string]any{"range": "24h", "status": "error", "limit": 10}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, []apiv1.ListEventsQuery{{Range: "24h", Status: "error", Limit: 10}}, ops.events)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"error_code":"reconnect"`)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "connect_account", Arguments: map[string]any{"account_id": "ig1"}})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, "ig1", ops.connects[0].AccountID)
 }
 
 func TestUpdatePostPublishesADraft(t *testing.T) {

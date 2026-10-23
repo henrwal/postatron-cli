@@ -126,6 +126,41 @@ func (c *Client) DeletePosts(ctx context.Context, req DeletePostsRequest) (*Dele
 }
 
 // ListAccounts calls GET /v1/accounts.
+// RetryPost sends a failed or partly published post's failed deliveries
+// again: all of them, or the accounts req names. It answers with the post,
+// now processing.
+func (c *Client) RetryPost(ctx context.Context, id string, req RetryPostRequest) (*Post, error) {
+	var out Post
+	if err := c.do(ctx, http.MethodPost, "/v1/posts/"+url.PathEscape(id)+"/retry", nil, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListEvents reads the account's event log, newest first.
+func (c *Client) ListEvents(ctx context.Context, query ListEventsQuery) (*EventList, error) {
+	params := url.Values{}
+	for key, value := range map[string]string{
+		"range":    query.Range,
+		"status":   query.Status,
+		"type":     query.Type,
+		"platform": query.Platform,
+		"cursor":   query.Cursor,
+	} {
+		if value != "" {
+			params.Set(key, value)
+		}
+	}
+	if query.Limit > 0 {
+		params.Set("limit", strconv.Itoa(query.Limit))
+	}
+	var out EventList
+	if err := c.do(ctx, http.MethodGet, "/v1/events", params, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) ListAccounts(ctx context.Context) (*AccountList, error) {
 	var out AccountList
 	if err := c.do(ctx, http.MethodGet, "/v1/accounts", nil, nil, &out); err != nil {

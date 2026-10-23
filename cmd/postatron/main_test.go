@@ -24,6 +24,31 @@ type fakeOps struct {
 	queueCreates []apiv1.CreateQueueRequest
 	queueUpdates []apiv1.UpdateQueueRequest
 	queueDeletes []string
+	retried      map[string][]string
+	eventQueries []apiv1.ListEventsQuery
+}
+
+func (f *fakeOps) RetryPost(_ context.Context, id string, req apiv1.RetryPostRequest) (*apiv1.Post, error) {
+	if f.retried == nil {
+		f.retried = map[string][]string{}
+	}
+	f.retried[id] = req.AccountIDs
+	return &apiv1.Post{ID: id, Status: apiv1.StatusProcessing, Deliveries: []apiv1.Delivery{
+		{Platform: "x", Username: "henry", Status: apiv1.StatusPublished, URL: "https://x.com/henry/status/1"},
+		{Platform: "instagram", Username: "henrygram", Status: apiv1.StatusPending},
+	}}, nil
+}
+
+func (f *fakeOps) ListEvents(_ context.Context, q apiv1.ListEventsQuery) (*apiv1.EventList, error) {
+	f.eventQueries = append(f.eventQueries, q)
+	return &apiv1.EventList{NextCursor: "e0", Data: []apiv1.Event{{
+		ID: "e1", At: time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC), Kind: "post.partial", Status: apiv1.EventStatusError, PostID: "p1",
+		Message: "Failed on 1 of 2 accounts.",
+		Accounts: []apiv1.EventAccount{
+			{ID: "x1", Platform: "x", Status: apiv1.EventStatusOK},
+			{ID: "ig1", Platform: "instagram", Status: apiv1.EventStatusError, Message: "Reconnect it.", ErrorCode: apiv1.ErrorReconnect},
+		},
+	}}}, nil
 }
 
 func (f *fakeOps) CreatePost(_ context.Context, req apiv1.CreatePostRequest) (*apiv1.Post, error) {
@@ -169,8 +194,48 @@ func TestCommands(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "list-queues", "get-usage", "get-analytics",
 		"create-upload", "get-upload", "update-post", "connect-account",
-		"delete-posts", "create-queue", "update-queue", "delete-queue",
+		"delete-posts", "create-queue", "update-queue", "delete-queue", "retry-post", "list-events",
 	}, names)
+}
+
+func TestRetryPostAndEvents(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "retry-post", "p1", "--account-ids", "ig1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ig1"}, ops.retried["p1"])
+	assert.Contains(t, out, "Post p1  [processing]")
+	assert.Contains(t, out, "postatron get-post p1")
+
+	_, err = run(t, ops, "retry-post", "p2")
+	require.NoError(t, err)
+	assert.Nil(t, ops.retried["p2"], "no accounts named retries every one that failed")
+
+	out, err = run(t, ops, "list-events", "--range", "24h", "--status", "error", "--limit", "5")
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.ListEventsQuery{Range: "24h", Status: "error", Limit: 5}, ops.eventQueries[0])
+	assert.Contains(t, out, "post.partial")
+	assert.Contains(t, out, "[reconnect] Reconnect it.")
+	assert.Contains(t, out, "--cursor e0")
+
+	out, err = run(t, ops, "connect-account", "--account-id", "ig1")
+	require.NoError(t, err)
+	assert.Equal(t, "ig1", ops.connects[0].AccountID)
+	assert.Empty(t, ops.connects[0].Platform)
+
+	_, err = run(t, ops, "connect-account")
+	require.Error(t, err, "a platform or an account to reconnect")
+}
+
+func TestAFailedPostSaysWhyAndHowToRetry(t *testing.T) {
+	var buf bytes.Buffer
+	printPost(&buf, apiv1.Post{ID: "p1", Status: apiv1.StatusPartial, Deliveries: []apiv1.Delivery{
+		{Platform: "youtube", Username: "henrytube", Status: apiv1.StatusPublished, URL: "https://youtu.be/1", Error: "The thumbnail was not set.", Warning: true},
+		{Platform: "instagram", Username: "henrygram", Status: apiv1.StatusFailed, Error: "Reconnect it.", ErrorCode: apiv1.ErrorReconnect},
+	}})
+	out := buf.String()
+	assert.Contains(t, out, "published (warning)")
+	assert.Contains(t, out, "[reconnect] Reconnect it.")
+	assert.Contains(t, out, "postatron retry-post p1")
 }
 
 func TestUpdatePost(t *testing.T) {
