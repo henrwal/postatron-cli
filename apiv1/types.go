@@ -542,6 +542,20 @@ type Queue struct {
 	NextSlotError string     `json:"next_slot_error,omitempty"`
 	// Queued is how many of its posts are still to go out.
 	Queued int `json:"queued"`
+	// Rescheduled, on an update with MovePosts that changed the slots or
+	// timezone, is what moving its posts did. RescheduleError says why they
+	// did not move; the update itself was saved.
+	Rescheduled     *QueueRescheduled `json:"rescheduled,omitempty"`
+	RescheduleError string            `json:"reschedule_error,omitempty"`
+}
+
+// QueueRescheduled is what moving a queue's posts onto its new slots did.
+type QueueRescheduled struct {
+	// Moved is how many posts were given a new time.
+	Moved int `json:"moved"`
+	// Kept is how many of its posts kept theirs: ones given a time of their
+	// own, due within five minutes, or changed while they were being moved.
+	Kept int `json:"kept"`
 }
 
 // QueueList is the response of GET /v1/queues.
@@ -564,8 +578,9 @@ type CreateQueueRequest struct {
 }
 
 // UpdateQueueRequest is the body of PATCH /v1/queues/{id}. Anything left out
-// keeps its value. Changing the slots or pausing the queue leaves posts it
-// has already placed where they are.
+// keeps its value. Changing the slots or timezone leaves the posts the queue
+// has already placed at their times unless MovePosts is set, and pausing it
+// never moves them.
 type UpdateQueueRequest struct {
 	Name     *string      `json:"name,omitempty"`
 	Profile  *string      `json:"profile,omitempty"`
@@ -573,6 +588,10 @@ type UpdateQueueRequest struct {
 	Slots    *[]QueueSlot `json:"slots,omitempty"`
 	// Active false pauses the queue; true resumes it.
 	Active *bool `json:"active,omitempty"`
+	// MovePosts, when the slots or timezone change, gives the queue's upcoming
+	// posts the new slots, in the order they were going out. Posts given a
+	// time of their own, and any due within five minutes, keep their times.
+	MovePosts bool `json:"move_posts,omitempty"`
 }
 
 // DeleteQueueResponse is the response of DELETE /v1/queues/{id}. Posts the

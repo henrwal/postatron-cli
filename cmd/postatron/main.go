@@ -637,6 +637,11 @@ func printQueue(w io.Writer, q apiv1.Queue) {
 	} else if q.NextSlotError != "" {
 		fmt.Fprintf(w, "Next slot: %s\n", q.NextSlotError)
 	}
+	if q.Rescheduled != nil {
+		fmt.Fprintf(w, "Moved:     %d posts to the new slots, %d kept their times\n", q.Rescheduled.Moved, q.Rescheduled.Kept)
+	} else if q.RescheduleError != "" {
+		fmt.Fprintf(w, "Moved:     %s\n", q.RescheduleError)
+	}
 }
 
 func newCreateQueueCommand(g *globals) *cobra.Command {
@@ -677,14 +682,15 @@ func newCreateQueueCommand(g *globals) *cobra.Command {
 
 func newUpdateQueueCommand(g *globals) *cobra.Command {
 	var (
-		name, timezone, profile string
-		slots                   []string
-		pause, resume           bool
+		name, timezone, profile  string
+		slots                    []string
+		pause, resume, movePosts bool
 	)
 	cmd := &cobra.Command{
 		Use:   "update-queue <queue>",
 		Short: "Change a queue's name, slots, timezone or profile, or pause or resume it",
 		Example: `  postatron update-queue "Weekday mornings" --slots "mon 08:30,fri 08:30"
+  postatron update-queue "Weekday mornings" --slots "tue 10:00" --move-posts
   postatron update-queue q_123 --pause`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -712,6 +718,7 @@ func newUpdateQueueCommand(g *globals) *cobra.Command {
 				active := resume
 				req.Active = &active
 			}
+			req.MovePosts = movePosts
 			q, err := g.ops().UpdateQueue(cmd.Context(), args[0], req)
 			if err != nil {
 				return err
@@ -729,6 +736,7 @@ func newUpdateQueueCommand(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&slots, "slots", nil, `replace every slot, e.g. "mon 09:00,thu 17:30"`)
 	cmd.Flags().BoolVar(&pause, "pause", false, "stop the queue taking posts")
 	cmd.Flags().BoolVar(&resume, "resume", false, "let the queue take posts again")
+	cmd.Flags().BoolVar(&movePosts, "move-posts", false, "with new --slots or --timezone, move the queue's upcoming posts onto them")
 	return cmd
 }
 

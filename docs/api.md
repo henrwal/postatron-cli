@@ -516,7 +516,10 @@ After a move to a smaller plan the oldest queues keep working; the rest stop tak
 
 `{id}` is the queue's id or its name.
 Any of `name`, `profile`, `timezone`, `slots` (replaces every slot) and `active` (`false` pauses, `true` resumes); what is left out keeps its value.
-Posts the queue has already placed keep their times.
+Posts the queue has already placed keep their times, unless the body has `"move_posts": true` and changes `slots` or `timezone`.
+Then its upcoming posts take the new slots, soonest first, in the order they were going out, through the same check as a new post, so none lands on a slot another post already has.
+A post given a time of its own (one not on the queue's old slots), or due within five minutes, keeps its time.
+The response is the queue as `GET /v1/queues` shows it, plus `rescheduled` (`{moved, kept}`), or `reschedule_error` saying why the posts did not move (no slots left, or no plan); the change to the queue is saved either way.
 
 ### DELETE /v1/queues/{id}
 

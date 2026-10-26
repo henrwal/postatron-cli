@@ -105,6 +105,7 @@ Use them when the person asks; never add one they did not ask for.
 
 `create_queue` sets up weekly slots for a profile: a `name`, an IANA `timezone` (ask if you do not know it) and `slots` of `{day, time}`, day 0 for Sunday to 6 for Saturday.
 `update_queue` changes a queue by name or id, and `active: false` pauses it.
+New `slots` or `timezone` leave the posts already in the queue at their times; pass `move_posts: true` to move them onto the new slots, and report the `rescheduled` counts back.
 `delete_queue` removes one; posts it placed stay scheduled.
 
 ## Everything else

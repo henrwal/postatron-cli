@@ -391,6 +391,14 @@ func TestQueueWriteTools(t *testing.T) {
 	require.NotNil(t, edit.Active)
 	assert.False(t, *edit.Active)
 	assert.Nil(t, edit.Slots, "slots left out are kept")
+	assert.False(t, edit.MovePosts)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "update_queue", Arguments: map[string]any{
+		"queue": "Mornings", "slots": []any{map[string]any{"day": 2, "time": "10:00"}}, "move_posts": true,
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	assert.True(t, ops.edits["Mornings"].MovePosts)
 
 	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_queue", Arguments: map[string]any{"queue": "q1"}})
 	require.NoError(t, err)

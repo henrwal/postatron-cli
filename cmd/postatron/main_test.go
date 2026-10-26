@@ -408,6 +408,12 @@ func TestQueueCommands(t *testing.T) {
 	require.NotNil(t, ops.queueUpdates[0].Active)
 	assert.False(t, *ops.queueUpdates[0].Active)
 	assert.Nil(t, ops.queueUpdates[0].Slots)
+	assert.False(t, ops.queueUpdates[0].MovePosts, "posts stay put unless asked")
+
+	_, err = run(t, ops, "update-queue", "Mornings", "--slots", "tue 10:00", "--move-posts")
+	require.NoError(t, err)
+	require.Len(t, ops.queueUpdates, 2)
+	assert.True(t, ops.queueUpdates[1].MovePosts)
 
 	out, err = run(t, ops, "delete-queue", "Mornings")
 	require.NoError(t, err)

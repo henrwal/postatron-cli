@@ -21,7 +21,7 @@ There are two ways to connect, with the same tools:
 | `list_profiles` | `GET /v1/profiles` | none |
 | `list_queues` | `GET /v1/queues` | none |
 | `create_queue` | `POST /v1/queues` | `name`, `timezone` (required), `profile`, `slots`, `paused` |
-| `update_queue` | `PATCH /v1/queues/{id}` | `queue` (required, name or id), `name`, `profile`, `timezone`, `slots`, `active` |
+| `update_queue` | `PATCH /v1/queues/{id}` | `queue` (required, name or id), `name`, `profile`, `timezone`, `slots`, `active`, `move_posts` |
 | `delete_queue` | `DELETE /v1/queues/{id}` | `queue` (required, name or id) |
 | `get_usage` | `GET /v1/usage` | none |
 | `get_analytics` | `GET /v1/analytics` | `range`, `platform`, `account_id`, `profile`, `source` |

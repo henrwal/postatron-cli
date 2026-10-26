@@ -190,6 +190,7 @@ Set them up in the dashboard under Queues, or here.
 postatron list-queues
 postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,tue 09:00,wed 09:00"
 postatron update-queue "Weekday mornings" --slots "mon 08:30,fri 08:30"
+postatron update-queue "Weekday mornings" --slots "tue 10:00" --move-posts
 postatron update-queue "Weekday mornings" --pause
 postatron delete-queue "Weekday mornings"
 postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"

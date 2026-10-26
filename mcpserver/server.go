@@ -61,7 +61,8 @@ const (
 	descDeletePosts = "Delete up to 100 posts at once, as delete_post does each: published posts are only removed from Postatron and stay on the platforms. " +
 		"Every id comes back in deleted or failed, with the reason."
 	descCreateQueue = "Create a posting queue: weekly time slots for one profile. Posts added to it with create_post's queue go out in its next free slot."
-	descUpdateQueue = "Change a queue's name, slots, timezone or profile, or pause or resume it. Posts it has already placed keep their times."
+	descUpdateQueue = "Change a queue's name, slots, timezone or profile, or pause or resume it. Posts it has already placed keep their times, " +
+		"unless move_posts is true with new slots or a new timezone: then its upcoming posts take the new slots in order, except ones given a time of their own."
 	descDeleteQueue = "Delete a queue. Posts it has already placed stay scheduled at their times."
 	descDeletePost  = "Delete a post from Postatron. A scheduled post or draft is cancelled and never goes out. A published post is only removed from Postatron: " +
 		"it stays live on the platforms and the person has to delete it there, so tell them. A post publishing now, or due within two minutes, cannot be deleted."
@@ -147,6 +148,8 @@ type UpdateQueueInput struct {
 	Timezone *string            `json:"timezone,omitempty" jsonschema:"A new IANA timezone."`
 	Slots    *[]apiv1.QueueSlot `json:"slots,omitempty" jsonschema:"Weekly slots; this replaces every slot."`
 	Active   *bool              `json:"active,omitempty" jsonschema:"false pauses the queue, true resumes it."`
+	// MovePosts moves the queue's upcoming posts onto new slots.
+	MovePosts bool `json:"move_posts,omitempty" jsonschema:"With new slots or a new timezone, true moves the queue's upcoming posts onto them, in the order they were going out. Posts given a time of their own, and any due within five minutes, keep their times."`
 }
 
 // QueueInput is the delete_queue tool input.
@@ -347,7 +350,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolUpdateQueue, Description: descUpdateQueue}),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in UpdateQueueInput) (*mcp.CallToolResult, *apiv1.Queue, error) {
 			out, err := ops.UpdateQueue(ctx, strings.TrimSpace(in.Queue), apiv1.UpdateQueueRequest{
-				Name: in.Name, Profile: in.Profile, Timezone: in.Timezone, Slots: in.Slots, Active: in.Active,
+				Name: in.Name, Profile: in.Profile, Timezone: in.Timezone, Slots: in.Slots, Active: in.Active, MovePosts: in.MovePosts,
 			})
 			if err != nil {
 				return handleError[*apiv1.Queue](err)
