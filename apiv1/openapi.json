@@ -3250,7 +3250,7 @@
         }
       },
       "Conflict": {
-        "description": "The resource is not in a state the request can act on, and nothing was changed. `conflict`: the post has started publishing, a retry found nothing that failed (`details.reason` is `not_retryable`, `not_failed` or `conflict`), or a profile already has an account on the platform. `validation_error` with this status: a queue is paused or cannot take the post. `idempotency_key_in_use`: a request with the same `Idempotency-Key` is still being handled; send it again after `Retry-After`.",
+        "description": "The resource is not in a state the request can act on, and nothing was changed. `conflict`: the post has started publishing, a queue is paused or cannot take the post, a retry found nothing that failed (`details.reason` is `not_retryable`, `not_failed` or `conflict`), or a profile already has an account on the platform. `idempotency_key_in_use`: a request with the same `Idempotency-Key` is still being handled; send it again after `Retry-After`.",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
