@@ -31,7 +31,8 @@ const (
 	CodeSubscriptionRequired = "subscription_required"
 	// CodeWorkspaceForbidden means the key or connection was made for a team
 	// workspace its holder can no longer work in: they left or were removed,
-	// or the owner's plan no longer includes teams.
+	// or the owner's plan no longer includes teams. It also refuses a
+	// workspace key what only the owner may do, such as managing webhooks.
 	CodeWorkspaceForbidden = "workspace_forbidden"
 	CodeRateLimited        = "rate_limited"
 	CodeQuotaExceeded      = "quota_exceeded"
@@ -121,7 +122,21 @@ type CreatePostRequest struct {
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
 	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
 	Pinterest *PinterestOptions `json:"pinterest,omitempty"`
+	// IdempotencyKey, when set, is sent as the Idempotency-Key header: up to
+	// 255 printable characters, unique per post, such as a UUID. Sending
+	// the same request with the same key within 24 hours answers with the
+	// post the first one made, and makes no second post, so a request whose
+	// answer was lost can be sent again safely. The same key with a
+	// different body is refused (CodeIdempotencyKeyReused), and so is one
+	// still being handled (CodeIdempotencyKeyInUse).
+	IdempotencyKey string `json:"-"`
 }
+
+// IdempotencyKeyHeader carries CreatePostRequest.IdempotencyKey.
+const IdempotencyKeyHeader = "Idempotency-Key"
+
+// MaxIdempotencyKeyLength is the longest Idempotency-Key the API accepts.
+const MaxIdempotencyKeyLength = 255
 
 // X reply audiences for XOptions.ReplySettings. Empty means everyone.
 const (

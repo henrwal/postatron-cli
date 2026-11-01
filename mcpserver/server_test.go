@@ -188,6 +188,21 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 	}, names)
 }
 
+// A key lets an agent that lost a create_post answer call it again safely;
+// it goes to the API as the Idempotency-Key header, never the body.
+func TestCreatePostToolPassesTheIdempotencyKey(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "create_post",
+		Arguments: map[string]any{"content": "hello", "platforms": []string{"x"}, "idempotency_key": " run-7 "},
+	})
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	require.Len(t, ops.created, 1)
+	assert.Equal(t, "run-7", ops.created[0].IdempotencyKey)
+}
+
 func TestCreatePostTool(t *testing.T) {
 	ops := &fakeOps{}
 	session := connect(t, ops)

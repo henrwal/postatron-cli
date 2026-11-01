@@ -43,6 +43,10 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron get-analytics` | `GET /v1/analytics` |
 | `postatron create-upload` | `POST /v1/media/uploads` |
 | `postatron get-upload <id>` | `GET /v1/media/uploads/{id}` |
+| `postatron webhooks list` | `GET /v1/webhooks` |
+| `postatron webhooks create` | `POST /v1/webhooks` |
+| `postatron webhooks delete <id>` | `DELETE /v1/webhooks/{id}` |
+| `postatron webhooks test <id>` | `POST /v1/webhooks/{id}/test` |
 
 Add `--json` to any command to print the raw API response, which is the recommended mode for scripts.
 
@@ -65,6 +69,7 @@ postatron create-post --content "New in store" --platforms x,instagram --profile
 | `--media-ids` | Upload ids from the API's upload endpoint. |
 | `--scheduled-at` | RFC 3339, at least 5 minutes ahead. Omit to publish now. |
 | `--queue` | A queue name or id: the post takes its next free slot. |
+| `--idempotency-key` | A key unique to this post, such as a UUID. Running the same command with the same key within 24 hours prints the post the first run made and makes no second one, so a run that timed out can be repeated safely. |
 | `--thread` | An X reply under the first tweet; repeat for each. |
 | `--poll` | Make the X post a poll with these 2 to 4 options; `--poll-minutes` for how long. |
 | `--reply-settings` | Who can reply on X: `following`, `mentioned_users`, `subscribers` or `verified`. |
@@ -250,6 +255,24 @@ postatron get-upload u_...
 For a file that is not on the public internet.
 `create-upload` prints a link; the person opens it while signed in to Postatron and picks the file.
 Once `get-upload` reports `READY`, pass the id to `create-post --media-ids`.
+
+### webhooks
+
+```bash
+postatron webhooks create --url https://example.com/webhooks/postatron
+postatron webhooks create --url https://example.com/hooks --events post.failed,post.partial,account.needs_attention
+postatron webhooks list
+postatron webhooks test wh_5c0f3a9e2b7d4c1e8f6a0b9d
+postatron webhooks delete wh_5c0f3a9e2b7d4c1e8f6a0b9d
+```
+
+A webhook POSTs a signed JSON event to your `https` URL when a post publishes, partly publishes, fails or goes back to the drafts, and when an account is connected, disconnected or needs reconnecting.
+`webhooks create` prints the signing secret, the only time it is shown; leave out `--events` for every event.
+`webhooks test` sends a signed `webhook.test` event at once and prints what your endpoint answered, exiting with 1 if it was not delivered.
+`webhooks list` shows each webhook's last attempt, and why one was switched off after 20 failed deliveries.
+Rotating a secret and switching a webhook off or on are in the dashboard and the API.
+How to check a signature, in Go, Node and Python, is in the API reference under Webhooks.
+Webhooks belong to the account's owner, so a key made for a team workspace is refused.
 
 ## Exit codes
 

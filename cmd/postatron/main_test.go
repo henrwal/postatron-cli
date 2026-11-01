@@ -194,8 +194,99 @@ func TestCommands(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "list-queues", "get-usage", "get-analytics",
 		"create-upload", "get-upload", "update-post", "connect-account",
-		"delete-posts", "create-queue", "update-queue", "delete-queue", "retry-post", "list-events",
+		"delete-posts", "create-queue", "update-queue", "delete-queue", "retry-post", "list-events", "webhooks",
 	}, names)
+}
+
+// fakeHooks stands in for the client's webhook calls.
+type fakeHooks struct {
+	created []apiv1.CreateWebhookRequest
+	deleted []string
+	tested  []string
+	result  apiv1.WebhookTestResult
+}
+
+func (f *fakeHooks) ListWebhooks(context.Context) (*apiv1.WebhookList, error) {
+	return &apiv1.WebhookList{Data: []apiv1.Webhook{
+		{ID: "wh_1", URL: "https://example.com/hooks", Events: []string{"*"}, Enabled: true,
+			LastAttempt: &apiv1.WebhookAttempt{At: time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC), Succeeded: true, StatusCode: 200}},
+		{ID: "wh_2", URL: "https://example.com/off", Events: []string{"post.failed"}, Enabled: false,
+			DisabledReason: "Switched off after 20 deliveries in a row failed."},
+	}}, nil
+}
+
+func (f *fakeHooks) CreateWebhook(_ context.Context, req apiv1.CreateWebhookRequest) (*apiv1.Webhook, error) {
+	f.created = append(f.created, req)
+	return &apiv1.Webhook{ID: "wh_3", URL: req.URL, Events: []string{"*"}, Enabled: true, Secret: "whsec_once"}, nil
+}
+
+func (f *fakeHooks) UpdateWebhook(_ context.Context, id string, _ apiv1.UpdateWebhookRequest) (*apiv1.Webhook, error) {
+	return &apiv1.Webhook{ID: id}, nil
+}
+
+func (f *fakeHooks) DeleteWebhook(_ context.Context, id string) (*apiv1.DeleteWebhookResponse, error) {
+	f.deleted = append(f.deleted, id)
+	return &apiv1.DeleteWebhookResponse{ID: id, Deleted: true}, nil
+}
+
+func (f *fakeHooks) TestWebhook(_ context.Context, id string) (*apiv1.WebhookTestResult, error) {
+	f.tested = append(f.tested, id)
+	return &f.result, nil
+}
+
+func (f *fakeHooks) RotateWebhookSecret(_ context.Context, id string) (*apiv1.Webhook, error) {
+	return &apiv1.Webhook{ID: id, Secret: "whsec_new"}, nil
+}
+
+func runHooks(t *testing.T, hooks *fakeHooks, args ...string) (string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	root, g := newRootCommand(&stdout, &stderr)
+	g.hooks = hooks
+	root.SetArgs(args)
+	err := root.Execute()
+	return stdout.String(), err
+}
+
+func TestWebhookCommands(t *testing.T) {
+	hooks := &fakeHooks{result: apiv1.WebhookTestResult{DeliveryID: "whd_1", Delivered: true, StatusCode: 204, DurationMs: 80}}
+
+	out, err := runHooks(t, hooks, "webhooks", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "wh_1")
+	assert.Contains(t, out, "every event")
+	assert.Contains(t, out, "ok 200")
+	assert.Contains(t, out, "wh_2: Switched off after 20 deliveries")
+
+	out, err = runHooks(t, hooks, "webhooks", "create", "--url", "https://example.com/hooks", "--events", "post.failed,post.partial")
+	require.NoError(t, err)
+	assert.Equal(t, []apiv1.CreateWebhookRequest{{URL: "https://example.com/hooks", Events: []string{"post.failed", "post.partial"}}}, hooks.created)
+	assert.Contains(t, out, "whsec_once", "the secret is printed the one time it exists")
+
+	out, err = runHooks(t, hooks, "webhooks", "test", "wh_1")
+	require.NoError(t, err)
+	assert.Contains(t, out, "answered 204 in 80 ms")
+
+	hooks.result = apiv1.WebhookTestResult{DeliveryID: "whd_2", Error: "The endpoint answered 500."}
+	out, err = runHooks(t, hooks, "webhooks", "test", "wh_1")
+	assert.Error(t, err, "a failed test exits non-zero, for scripts")
+	assert.Contains(t, out, "The endpoint answered 500.")
+
+	out, err = runHooks(t, hooks, "webhooks", "delete", "wh_1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"wh_1"}, hooks.deleted)
+	assert.Contains(t, out, "Deleted webhook wh_1")
+
+	_, err = runHooks(t, hooks, "webhooks", "create")
+	assert.Error(t, err, "--url is required")
+}
+
+func TestCreatePostTakesAnIdempotencyKey(t *testing.T) {
+	ops := &fakeOps{}
+	_, err := run(t, ops, "create-post", "--content", "hi", "--platforms", "x", "--idempotency-key", "deploy-2026-11-01")
+	require.NoError(t, err)
+	require.Len(t, ops.created, 1)
+	assert.Equal(t, "deploy-2026-11-01", ops.created[0].IdempotencyKey)
 }
 
 func TestRetryPostAndEvents(t *testing.T) {

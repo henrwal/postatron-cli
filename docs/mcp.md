@@ -8,7 +8,7 @@ There are two ways to connect, with the same tools:
 
 | Tool | Endpoint | Arguments |
 | --- | --- | --- |
-| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok`, `youtube`, `pinterest` |
+| `create_post` | `POST /v1/posts` | `content` (required), `platforms` or `account_ids`, `profile`, `media_urls`, `media_ids`, `scheduled_at` or `queue`, `x`, `instagram`, `tiktok`, `youtube`, `pinterest`, `idempotency_key` |
 | `list_posts` | `GET /v1/posts` | `status`, `platform`, `profile`, `from`, `to`, `limit`, `cursor` |
 | `get_post` | `GET /v1/posts/{id}` | `post_id` (required) |
 | `update_post` | `PATCH /v1/posts/{id}` | `post_id` (required), `content`, `scheduled_at`, `add_platforms`, `add_account_ids`, `remove_account_ids`, `profile`, `publish_now`, `x`, `instagram`, `tiktok`, `youtube`, `pinterest` |
@@ -38,6 +38,11 @@ When a post fails, each failed delivery carries an `error_code` that says what t
 A post or edit to such an account is refused up front with `reconnect_required`.
 `list_events` reads the Logs page, for "what failed this week, and why".
 A draft whose `unpublished.reason` is `no_plan` came due while the account had no plan; once there is one, `update_post` schedules or publishes it.
+
+`create_post` takes an `idempotency_key`, sent as the API's `Idempotency-Key` header: a call that timed out or failed before the agent saw its answer can be made again with the same key and arguments, and it gets back the post the first call made instead of making a second.
+The same key with different arguments is refused with `idempotency_key_reused`, and one sent while the first is still running with `idempotency_key_in_use`.
+
+Webhooks are not MCP tools: they are set up once, in the dashboard, the API or the CLI (`postatron webhooks`).
 
 A post to Pinterest is saved to a board: `pinterest.board`, by id or by name, or `pinterest.boards`, one per Pinterest account, for a post to several.
 Left out, the account's default board is used (`default_board_id` in `list_accounts`).

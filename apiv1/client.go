@@ -42,7 +42,11 @@ var _ Operations = (*Client)(nil)
 // CreatePost calls POST /v1/posts.
 func (c *Client) CreatePost(ctx context.Context, req CreatePostRequest) (*Post, error) {
 	var out Post
-	if err := c.do(ctx, http.MethodPost, "/v1/posts", nil, req, &out); err != nil {
+	var headers map[string]string
+	if key := strings.TrimSpace(req.IdempotencyKey); key != "" {
+		headers = map[string]string{IdempotencyKeyHeader: key}
+	}
+	if err := c.doWith(ctx, http.MethodPost, "/v1/posts", nil, headers, req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -263,6 +267,11 @@ func (c *Client) GetUsage(ctx context.Context) (*UsageReport, error) {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, params url.Values, body, out any) error {
+	return c.doWith(ctx, method, path, params, nil, body, out)
+}
+
+// doWith is do with extra request headers, such as Idempotency-Key.
+func (c *Client) doWith(ctx context.Context, method, path string, params url.Values, headers map[string]string, body, out any) error {
 	if c.APIKey == "" {
 		return fmt.Errorf("no API key configured: set POSTATRON_API_KEY or pass --api-key")
 	}
@@ -290,6 +299,9 @@ func (c *Client) do(ctx context.Context, method, path string, params url.Values,
 	req.Header.Set("User-Agent", c.UserAgent)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 
 	resp, err := c.HTTPClient.Do(req)

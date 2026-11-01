@@ -34,12 +34,26 @@ type globals struct {
 	asJSON  bool
 	out     io.Writer
 	client  apiv1.Operations
+	// hooks stands in for the client's webhook calls in tests.
+	hooks apiv1.WebhookOperations
 }
 
 func (g *globals) ops() apiv1.Operations {
 	if g.client != nil {
 		return g.client
 	}
+	return g.newClient()
+}
+
+// webhooks are not MCP tools, so they are not in Operations.
+func (g *globals) webhooks() apiv1.WebhookOperations {
+	if g.hooks != nil {
+		return g.hooks
+	}
+	return g.newClient()
+}
+
+func (g *globals) newClient() *apiv1.Client {
 	key := g.apiKey
 	if key == "" {
 		key = os.Getenv("POSTATRON_API_KEY")
@@ -92,6 +106,7 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newGetAnalyticsCommand(g),
 		newCreateUploadCommand(g),
 		newGetUploadCommand(g),
+		newWebhooksCommand(g),
 	)
 	return root, g
 }
@@ -106,6 +121,7 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 		mediaIDs    []string
 		scheduledAt string
 		queue       string
+		idemKey     string
 		options     platformFlags
 	)
 	cmd := &cobra.Command{
@@ -129,6 +145,9 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 				MediaURLs:  mediaURLs,
 				MediaIDs:   mediaIDs,
 				Queue:      strings.TrimSpace(queue),
+				// Sent as the Idempotency-Key header: running the same
+				// command again with it makes no second post.
+				IdempotencyKey: strings.TrimSpace(idemKey),
 			}
 			opts, err := options.build()
 			if err != nil {
@@ -164,6 +183,7 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 	cmd.Flags().StringSliceVar(&mediaIDs, "media-ids", nil, "upload ids to attach")
 	cmd.Flags().StringVar(&scheduledAt, "scheduled-at", "", "RFC 3339 time to schedule, at least 5 minutes ahead")
 	cmd.Flags().StringVar(&queue, "queue", "", "queue name or id from list-queues: post in its next free slot")
+	cmd.Flags().StringVar(&idemKey, "idempotency-key", "", "a unique key for this post, e.g. a UUID: the same command with the same key within 24 hours makes no second post")
 	options.register(cmd)
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
@@ -1082,6 +1102,154 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+// ---------------------------------------------------------------------------
+// webhooks
+// ---------------------------------------------------------------------------
+
+// newWebhooksCommand groups the webhook commands. Webhooks belong to the
+// account's owner, so a key made for a team workspace is refused.
+func newWebhooksCommand(g *globals) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "webhooks",
+		Short: "List, add, test and delete the account's webhooks",
+		Long: "Webhooks: Postatron POSTs a signed JSON event to your URL when a post publishes, partly publishes, fails or goes back to the drafts, " +
+			"and when an account is connected, disconnected or needs reconnecting. Check each request's Postatron-Signature with the secret " +
+			"`webhooks create` prints (see docs/api.md, Webhooks).",
+	}
+	cmd.AddCommand(newListWebhooksCommand(g), newCreateWebhookCommand(g), newDeleteWebhookCommand(g), newTestWebhookCommand(g))
+	return cmd
+}
+
+func newListWebhooksCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List webhooks, with how each last delivery went",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			list, err := g.webhooks().ListWebhooks(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, list)
+			}
+			if len(list.Data) == 0 {
+				fmt.Fprintln(g.out, "No webhooks. Add one with: postatron webhooks create --url https://...")
+				return nil
+			}
+			tw := tabwriter.NewWriter(g.out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "ID\tURL\tSTATE\tEVENTS\tLAST ATTEMPT")
+			for _, w := range list.Data {
+				state := "on"
+				if !w.Enabled {
+					state = "off"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", w.ID, w.URL, state, webhookEvents(w.Events), lastAttempt(w.LastAttempt))
+			}
+			if err := tw.Flush(); err != nil {
+				return err
+			}
+			for _, w := range list.Data {
+				if w.DisabledReason != "" {
+					fmt.Fprintf(g.out, "%s: %s\n", w.ID, w.DisabledReason)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func newCreateWebhookCommand(g *globals) *cobra.Command {
+	var (
+		url    string
+		events []string
+	)
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Add a webhook and print its signing secret, shown only this once",
+		Example: `  postatron webhooks create --url https://example.com/webhooks/postatron
+  postatron webhooks create --url https://example.com/hooks --events post.failed,post.partial,account.needs_attention`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			hook, err := g.webhooks().CreateWebhook(cmd.Context(), apiv1.CreateWebhookRequest{URL: strings.TrimSpace(url), Events: events})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, hook)
+			}
+			fmt.Fprintf(g.out, "Added webhook %s for %s, sending %s.\n", hook.ID, hook.URL, webhookEvents(hook.Events))
+			fmt.Fprintf(g.out, "Signing secret (shown only now, so store it safely):\n%s\n", hook.Secret)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&url, "url", "", "the https address to send events to (required)")
+	cmd.Flags().StringSliceVar(&events, "events", nil, "events to send, e.g. post.failed,post.partial (default every event): "+strings.Join(apiv1.WebhookEventTypes, ", "))
+	_ = cmd.MarkFlagRequired("url")
+	return cmd
+}
+
+func newDeleteWebhookCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <webhook-id>",
+		Short: "Delete a webhook; nothing more is sent to it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := g.webhooks().DeleteWebhook(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, out)
+			}
+			fmt.Fprintf(g.out, "Deleted webhook %s.\n", out.ID)
+			return nil
+		},
+	}
+}
+
+func newTestWebhookCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "test <webhook-id>",
+		Short: "Send a signed webhook.test event now and show what the endpoint answered",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := g.webhooks().TestWebhook(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, result)
+			}
+			if result.Delivered {
+				fmt.Fprintf(g.out, "Delivered %s: the endpoint answered %d in %d ms.\n", result.DeliveryID, result.StatusCode, result.DurationMs)
+				return nil
+			}
+			fmt.Fprintf(g.out, "Not delivered (%s): %s\n", result.DeliveryID, result.Error)
+			return errors.New("the test was not delivered")
+		},
+	}
+}
+
+func webhookEvents(events []string) string {
+	if len(events) == 0 || (len(events) == 1 && events[0] == apiv1.WebhookAllEvents) {
+		return "every event"
+	}
+	return strings.Join(events, ",")
+}
+
+func lastAttempt(a *apiv1.WebhookAttempt) string {
+	if a == nil {
+		return "none yet"
+	}
+	when := a.At.UTC().Format(time.RFC3339)
+	if a.Succeeded {
+		return fmt.Sprintf("%s ok %d", when, a.StatusCode)
+	}
+	if a.StatusCode > 0 {
+		return fmt.Sprintf("%s failed %d", when, a.StatusCode)
+	}
+	return when + " failed"
 }
 
 // ---------------------------------------------------------------------------

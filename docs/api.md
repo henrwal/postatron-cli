@@ -25,6 +25,12 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `GET` | `/v1/analytics` | Engagement, reach, followers and best posts | `posts:read` |
 | `POST` | `/v1/media/uploads` | A link a person uses to attach a file from their device | `posts:write` |
 | `GET` | `/v1/media/uploads/{id}` | Whether that file has arrived | `posts:read` |
+| `GET` | `/v1/webhooks` | The account's webhooks and how each last delivery went | `posts:read` |
+| `POST` | `/v1/webhooks` | Add a webhook; the answer carries its signing secret, once | `posts:write` and `posts:read` |
+| `PATCH` | `/v1/webhooks/{id}` | Change a webhook's URL or events, or switch it off or on | `posts:write` |
+| `DELETE` | `/v1/webhooks/{id}` | Delete a webhook | `posts:write` |
+| `POST` | `/v1/webhooks/{id}/test` | Send a signed `webhook.test` event now | `posts:write` |
+| `POST` | `/v1/webhooks/{id}/rotate-secret` | A new signing secret; the old one signs beside it for a day | `posts:write` |
 
 ## Authentication
 
@@ -142,13 +148,39 @@ Non-2xx responses share one envelope:
 | 402 | `quota_exceeded` | Destination-post ceiling reached |
 | 403 | `insufficient_scope` | Key lacks the scope |
 | 403 | `subscription_required` | No active plan; `details.plans_url` is where to choose one |
-| 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team |
-| 404 | `not_found` | Unknown endpoint, post, queue or upload |
+| 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team, or one asking for something only the owner may do, such as managing webhooks |
+| 404 | `not_found` | Unknown endpoint, post, queue, upload or webhook |
 | 409 | `conflict` | The post started publishing, a queue is paused or full, or a retry found nothing that failed |
+| 409 | `idempotency_key_in_use` | A request with the same `Idempotency-Key` is still being handled; send it again in a moment |
+| 422 | `idempotency_key_reused` | The `Idempotency-Key` was used in the last 24 hours for a different request |
 | 422 | `reconnect_required` | An account the post would go to cannot post until it is connected again; `details.account_ids` names them, and `POST /v1/accounts/connect` with `account_id` gives the link |
 | 422 | `validation_error` | Bad input; `details` says which field |
 | 429 | `rate_limited` | Per-key limit hit; honour `Retry-After` |
 | 500 | `internal_error` | Something broke on our side |
+
+## Idempotent requests
+
+`POST /v1/posts` takes an `Idempotency-Key` header, so a request whose answer you never saw (a timeout, a dropped connection) can be sent again without making a second post.
+The key is any string of 1 to 255 printable ASCII characters that you choose, unique to the post you mean to make; a UUID is a good choice.
+
+```bash
+curl https://api.postatron.com/v1/posts \
+  -H "Authorization: Bearer ptn_..." \
+  -H "Idempotency-Key: 3f6c1d2e-8a4b-4f0e-9c1d-7b2a5e6f8d90" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Launch day!", "platforms": ["x", "linkedin"]}'
+```
+
+- The first request with a key runs as usual, and if it succeeds its answer is kept for 24 hours.
+- The same request with the same key in that time gets the same answer back, with the header `Idempotent-Replayed: true`, and makes no post and uses no quota.
+  The body is compared as JSON, so the order of its fields and its spacing do not matter.
+- The same key with a different request is refused with `422 idempotency_key_reused`.
+- The same key while the first request is still running is refused with `409 idempotency_key_in_use` and `Retry-After`; send it again then.
+  If that first request never finished, the key is free again two minutes after it started.
+- A request that was refused (a validation error, a quota, a reconnect) is not kept, so the same key can be used again once it is put right.
+- Keys are your own: a teammate using the same key in the same account does not collide with you.
+
+Over MCP, `create_post` takes the same key as `idempotency_key`; the CLI takes it as `create-post --idempotency-key`.
 
 ## Endpoints
 
@@ -668,6 +700,211 @@ The link carries no credential; someone who intercepts it gets a sign-in page.
 
 `status` is `PENDING` until the file arrives and `READY` afterwards.
 Pass a ready id to `POST /v1/posts` in `media_ids`.
+
+## Webhooks
+
+A webhook sends the account's events to your own server as they happen: Postatron POSTs a signed JSON body to its URL.
+An account can have five, each receiving every event or only those it chooses.
+Add them in the dashboard under **API & MCP** or with the endpoints below.
+
+### Events
+
+| `type` | When | `data` |
+| --- | --- | --- |
+| `post.published` | A post went out on every account it was for | `post` |
+| `post.partial` | A post went out on some accounts and failed on others | `post` |
+| `post.failed` | A post failed on every account | `post` |
+| `post.unpublished` | A scheduled post came due while the account had no plan, and went back to the drafts | `post` |
+| `account.connected` | A social account was connected | `account` |
+| `account.disconnected` | A social account was removed; `reason` is `user`, `expired` or `revoked` | `account`, `reason`, `message`, `at_risk` |
+| `account.needs_attention` | An account must be connected again before its scheduled posts can go out | `account`, `message`, `at_risk` |
+| `webhook.test` | Sent by `POST /v1/webhooks/{id}/test` | `webhook_id`, `message` |
+
+`post` is the post exactly as `GET /v1/posts/{id}` describes it, with every delivery and its `error_code`.
+`account` is the account as `GET /v1/accounts` describes it; on `account.disconnected` its `status` is `disconnected`.
+`at_risk` lists up to ten scheduled posts that will fail until the account is connected again, and `at_risk_count` counts them all.
+No token or secret is ever in a payload.
+
+```json
+{
+  "id": "whd_9f2c4e1b7a3d5e6f8091a2b3c4d5e6f7",
+  "type": "post.partial",
+  "created_at": "2026-11-01T09:00:00Z",
+  "data": {
+    "post": {
+      "id": "0AbCdEfGhIjKlMnOpQrS",
+      "status": "partial",
+      "content": "Launch day!",
+      "media_type": "text",
+      "contains_link": false,
+      "created_at": "2026-11-01T08:59:58Z",
+      "source": "api",
+      "deliveries": [
+        { "account_id": "1234567890", "platform": "x", "username": "acmehq", "status": "published", "url": "https://x.com/acmehq/status/1" },
+        { "account_id": "1784140000000", "platform": "instagram", "username": "acme", "status": "failed", "error": "Instagram needs an image or a video.", "error_code": "validation" }
+      ]
+    }
+  }
+}
+```
+
+Every request carries these headers:
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | `application/json` |
+| `User-Agent` | `Postatron-Webhooks/1` |
+| `Postatron-Event` | The event's `type` |
+| `Postatron-Delivery` | The delivery's id, the same as the body's `id` |
+| `Postatron-Signature` | `t=<unix seconds>,v1=<signature>` |
+
+### Checking the signature
+
+Every request is signed with the webhook's secret, which starts `whsec_` and is shown once, when the webhook is made or its secret rotated.
+The signature is the hex HMAC-SHA256 of `<t>.<raw body>`, keyed with the whole secret, `whsec_` included, where `t` is the header's timestamp.
+Check it on the raw body exactly as it arrived, before parsing the JSON, and refuse a timestamp more than five minutes from now, so a captured request cannot be replayed later.
+For a day after the secret is rotated the header carries two `v1` signatures, one made with each secret; accept the request if either matches.
+
+Go, with this module:
+
+```go
+import "github.com/henrwal/postatron-cli/apiv1"
+
+func handle(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err := apiv1.VerifyWebhook(os.Getenv("POSTATRON_WEBHOOK_SECRET"), r.Header.Get("Postatron-Signature"), body, 0, time.Now()); err != nil {
+		http.Error(w, "bad signature", http.StatusBadRequest)
+		return
+	}
+	var event apiv1.WebhookEvent
+	_ = json.Unmarshal(body, &event)
+	w.WriteHeader(http.StatusNoContent) // answer first, then do the work
+}
+```
+
+Node:
+
+```js
+import crypto from 'node:crypto';
+
+export function verifyPostatron(secret, header, rawBody, toleranceSeconds = 300) {
+  let t = '';
+  const signatures = [];
+  for (const part of (header || '').split(',')) {
+    const [key, value] = part.trim().split('=');
+    if (key === 't') t = value;
+    if (key === 'v1') signatures.push(value);
+  }
+  if (!/^\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > toleranceSeconds) return false;
+  const expected = crypto.createHmac('sha256', secret).update(`${t}.`).update(rawBody).digest('hex');
+  return signatures.some(s => s.length === expected.length && crypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected)));
+}
+
+// Express: keep the raw body for the check.
+app.post('/webhooks/postatron', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verifyPostatron(process.env.POSTATRON_WEBHOOK_SECRET, req.get('Postatron-Signature'), req.body)) return res.sendStatus(400);
+  const event = JSON.parse(req.body);
+  res.sendStatus(204);
+});
+```
+
+Python:
+
+```python
+import hashlib
+import hmac
+import time
+
+
+def verify_postatron(secret: str, header: str, raw_body: bytes, tolerance: int = 300) -> bool:
+    t, signatures = "", []
+    for part in (header or "").split(","):
+        key, _, value = part.strip().partition("=")
+        if key == "t":
+            t = value
+        elif key == "v1":
+            signatures.append(value)
+    if not t.isdigit() or abs(time.time() - int(t)) > tolerance:
+        return False
+    expected = hmac.new(secret.encode(), t.encode() + b"." + raw_body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, s) for s in signatures)
+```
+
+### Delivery and retries
+
+- Answer with any 2xx status within 10 seconds; anything else, including a redirect, counts as a failure.
+  Do slow work after answering.
+- Redirects are never followed, so give the final address.
+- A failed delivery is tried six times in all: at once, then after about 1 minute, 10 minutes, 1 hour, 6 hours and 12 hours.
+- Every attempt, and any repeat, carries the same delivery id, so use `Postatron-Delivery` to ignore one you have already handled.
+  Deliveries are not guaranteed to arrive in order; use `created_at`.
+- After 20 deliveries in a row fail every attempt, the webhook is switched off, with `disabled_reason` saying so; switch it back on with `PATCH` and `"enabled": true`, which also clears the count.
+- A webhook that is switched off, deleted or no longer subscribed to an event is sent nothing more, including deliveries already waiting.
+- Nothing is sent while the account has no plan.
+- A payload is a few kilobytes; one over 256 KiB is not sent, and the webhook's `last_attempt` says so.
+
+### Addresses
+
+A webhook's URL must be `https`, on port 443 or another port given in the URL, with no user name, password or `#fragment`.
+Its host must resolve only to public addresses: private, loopback, link-local, carrier-grade NAT, cloud metadata and other reserved ranges, IPv4 and IPv6, are refused.
+This is checked when the webhook is saved and again before every request, on the address actually connected to.
+
+### GET /v1/webhooks
+
+```json
+{
+  "data": [
+    {
+      "id": "wh_5c0f3a9e2b7d4c1e8f6a0b9d",
+      "url": "https://example.com/webhooks/postatron",
+      "events": ["*"],
+      "enabled": true,
+      "created_at": "2026-11-01T08:00:00Z",
+      "last_attempt": { "at": "2026-11-01T09:00:01Z", "event": "post.partial", "succeeded": true, "status_code": 200, "duration_ms": 182 },
+      "consecutive_failures": 0
+    }
+  ]
+}
+```
+
+`events` is `["*"]` for every event, including ones added later.
+`last_attempt` is the latest attempt, a test or a real event, with `error` when it failed.
+`consecutive_failures` counts deliveries in a row that failed every attempt.
+The secret is never listed.
+
+### POST /v1/webhooks
+
+```json
+{ "url": "https://example.com/webhooks/postatron", "events": ["post.failed", "post.partial", "account.needs_attention"] }
+```
+
+Leave `events` out for every event.
+The answer, `201 Created`, is the webhook with its `secret`, which is not shown again.
+Choosing what a webhook receives also needs the `posts:read` scope, since it will receive the account's posts.
+
+### PATCH /v1/webhooks/{id}
+
+Any of `url`, `events` and `enabled`; what is left out is kept.
+A new `url` is checked like a first one, and changing `url` or `events` also needs `posts:read`.
+
+### DELETE /v1/webhooks/{id}
+
+Answers `{ "id": "wh_...", "deleted": true }`.
+
+### POST /v1/webhooks/{id}/test
+
+Sends a signed `webhook.test` event there and then, even to a webhook that is switched off, and answers with what the endpoint said:
+
+```json
+{ "delivery_id": "whd_...", "delivered": false, "status_code": 500, "error": "The endpoint answered 500 Internal Server Error.", "duration_ms": 87 }
+```
+
+### POST /v1/webhooks/{id}/rotate-secret
+
+Answers with the webhook and its new `secret`, shown once.
+The old secret keeps signing beside the new one for 24 hours, so you can switch your server over without refusing events.
+
+Webhooks belong to the account's owner, because they carry every post in it, across every profile: a team workspace key is refused with `403 workspace_forbidden`.
 
 ## Plans
 

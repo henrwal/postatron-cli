@@ -93,6 +93,8 @@ postatron get-usage
 postatron get-analytics --range 7d
 postatron create-upload --purpose "photo for Tuesday"
 postatron get-upload <id>
+postatron webhooks create --url https://example.com/webhooks/postatron --events post.failed,post.partial
+postatron webhooks test <id>
 ```
 
 Add `--json` to any command for the raw API response.
@@ -103,6 +105,11 @@ Full reference in [docs/cli.md](docs/cli.md).
 Every failed delivery carries an `error_code` that says what to do: `reconnect` (sign the account in again with `connect-account --account-id`, or `connect_account` over MCP), `rate_limited`, `platform_unavailable` and `postatron` (retry), `media_rejected` and `validation` (make a new post with the change), `policy` and `unknown` (read the message).
 `retry-post` (`retry_post`) sends the post again to the accounts it failed on, never to one it already reached, and is not charged again.
 `list-events` (`list_events`) reads the same log as the dashboard's Logs page.
+
+## Webhooks
+
+A webhook POSTs a signed JSON event to your own server when a post publishes, partly publishes or fails, and when an account is connected, disconnected or needs reconnecting.
+Set one up in the dashboard, with `POST /v1/webhooks` or with `postatron webhooks create`, and check each request's `Postatron-Signature` with its secret; [docs/api.md](docs/api.md#webhooks) has the rules and a Go, Node and Python check.
 
 ## Profiles
 
