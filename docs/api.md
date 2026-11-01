@@ -124,7 +124,7 @@ Limits are per API key (per user and client for OAuth), counted in fixed one-min
 
 | Class | Requests per minute |
 | --- | --- |
-| Writes (`POST`, `DELETE`) | 30 |
+| Writes (`POST`, `PATCH`, `DELETE`) | 30 |
 | Reads (`GET`) | 60 |
 | Upload sessions (`POST /v1/media/uploads`) | 120 |
 
@@ -287,7 +287,7 @@ Each needs an account on its platform among the post's accounts.
 | Pinterest | `boards` | For a post to several Pinterest accounts: each account id (from `GET /v1/accounts`) to its board, by id or name; wins over `board` for the accounts it names |
 | Pinterest | `title` | The Pin's title, up to 100 characters; left out, the first line of `content`, cut to 100 |
 | Pinterest | `description` | Replaces `content` as the Pin's description, up to 800 characters |
-| Pinterest | `link` | Where the Pin leads when someone taps it: a full `https` address, up to 2,048 characters |
+| Pinterest | `link` | Where the Pin leads when someone taps it: a full `https` or `http` address, up to 2,048 characters |
 
 A TikTok post is published directly once it has a `privacy`, and TikTok then asks for its settings as a set: `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
 With `draft: true`, or with `tiktok` left out, the post goes to the creator's TikTok inbox instead, and they finish it in the TikTok app, which asks for the rest itself.
@@ -389,7 +389,7 @@ A retry is not counted against the monthly quota again: the destination-post was
 
 Refusals:
 
-- `409 conflict` when the post is not `failed` or `partial`, nothing on it failed, or a named account published (`details.reason` is `not_retryable` or `not_failed`).
+- `409 conflict` when the post is not `failed` or `partial`, nothing on it failed, or a named account published (`details.reason` is `not_retryable` or `not_failed`), or the post changed while the retry was being made (`details.reason` is `conflict`; reload it and try again).
 - `422 validation_error` when a named account is not on the post.
 - `422 reconnect_required` when an account to retry cannot post until it is connected again, or is no longer connected; `details.account_ids` names them.
   Nothing is sent while any of them would only fail again.
@@ -404,7 +404,7 @@ Query parameters, all optional:
 | `platform` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube`, `pinterest` |
 | `profile` | A profile id or name: only posts to its accounts |
 | `from`, `to` | RFC 3339; applies to `scheduled_at` for scheduled posts and `created_at` otherwise |
-| `limit` | 1 to 100, default 25 |
+| `limit` | 1 to 100, default 25; more than 100 is treated as 100 |
 | `cursor` | `next_cursor` from the previous page |
 
 Posts come newest first.
@@ -491,7 +491,8 @@ The link opens Postatron and starts that platform's sign-in; nothing is connecte
 It only works for the person whose key asked for it: signed in as someone else, the page refuses it.
 A team workspace key's link also opens the dashboard in that workspace.
 A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link, and a profile that already has an account on that platform gets `409 conflict`.
-`platform` is one of `x`, `instagram`, `facebook`, `linkedin`, `tiktok`, `youtube`, `threads`, `bluesky` or `pinterest`.
+`platform` is one of `x` (or `twitter`), `instagram`, `facebook`, `linkedin`, `linkedin_page` (a LinkedIn company Page), `tiktok`, `youtube`, `threads` or `bluesky`, and `pinterest` once Postatron's Pinterest app is approved.
+`linkedin_page` is accepted only while company Pages are switched on; the answer to an unsupported platform lists the ones that are.
 A Pinterest account must be a Pinterest business account; a free one will do, and a personal account can be switched in Pinterest's settings.
 
 To sign in again an account whose access has gone (`reconnect_required`, or a delivery with `error_code: "reconnect"`), pass its `account_id`; `platform` can then be left out.
@@ -657,8 +658,8 @@ Events are kept for 90 days.
 | `range` | `24h`, `7d` (default), `30d` or `90d`, ending now |
 | `status` | `ok`, `warning` or `error`; several separated by commas |
 | `type` | `posts`, `accounts` or `api`; several separated by commas |
-| `platform` | Only events about an account on this platform |
-| `limit` | 1 to 100, default 25 |
+| `platform` | Only events about an account on this platform; several may be given, separated by commas |
+| `limit` | 1 to 100, default 25; more than 100 is treated as 100 |
 | `cursor` | `next_cursor` from the previous page |
 
 ```json
