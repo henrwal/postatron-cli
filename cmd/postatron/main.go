@@ -118,7 +118,8 @@ func newCreatePostCommand(g *globals) *cobra.Command {
   postatron create-post --content "Whenever there's room" --platforms x,linkedin --queue "Weekday mornings"
   postatron create-post --content "Tea or coffee?" --platforms x --poll "Tea,Coffee" --reply-settings following
   postatron create-post --content "1/ A thread" --platforms x --thread "2/ More" --thread "3/ The end"
-  postatron create-post --content "New reel" --platforms instagram --media-urls https://example.com/r.mp4 --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'`,
+  postatron create-post --content "New reel" --platforms instagram --media-urls https://example.com/r.mp4 --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'
+  postatron create-post --content "Autumn soup" --platforms pinterest --media-urls https://example.com/soup.jpg --options '{"pinterest":{"board":"Recipes","link":"https://example.com/soup"}}'`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			req := apiv1.CreatePostRequest{
 				Content:    content,
@@ -129,10 +130,11 @@ func newCreatePostCommand(g *globals) *cobra.Command {
 				MediaIDs:   mediaIDs,
 				Queue:      strings.TrimSpace(queue),
 			}
-			var err error
-			if req.X, req.Instagram, req.TikTok, req.YouTube, err = options.build(); err != nil {
+			opts, err := options.build()
+			if err != nil {
 				return err
 			}
+			req.X, req.Instagram, req.TikTok, req.YouTube, req.Pinterest = opts.X, opts.Instagram, opts.TikTok, opts.YouTube, opts.Pinterest
 			if scheduledAt != "" && queue != "" {
 				return usageError("use --scheduled-at or --queue, not both")
 			}
@@ -181,7 +183,7 @@ type platformFlags struct {
 }
 
 func (f *platformFlags) register(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&f.raw, "options", "", `platform options as JSON, e.g. '{"x":{...},"instagram":{...},"tiktok":{...},"youtube":{...}}', or @file.json`)
+	cmd.Flags().StringVar(&f.raw, "options", "", `platform options as JSON, e.g. '{"x":{...},"instagram":{...},"tiktok":{...},"youtube":{...},"pinterest":{...}}', or @file.json`)
 	cmd.Flags().StringArrayVar(&f.thread, "thread", nil, "an X reply under the first tweet; repeat for each, in order")
 	cmd.Flags().StringSliceVar(&f.poll, "poll", nil, "make the X post a poll with these 2 to 4 options")
 	cmd.Flags().IntVar(&f.pollMinutes, "poll-minutes", 0, "how long the X poll runs (5 to 10080, default a day)")
@@ -197,24 +199,25 @@ type options struct {
 	Instagram *apiv1.InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *apiv1.TikTokOptions    `json:"tiktok,omitempty"`
 	YouTube   *apiv1.YouTubeOptions   `json:"youtube,omitempty"`
+	Pinterest *apiv1.PinterestOptions `json:"pinterest,omitempty"`
 }
 
 // build merges --options with the individual flags, which win.
-func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv1.TikTokOptions, *apiv1.YouTubeOptions, error) {
+func (f *platformFlags) build() (options, error) {
 	var o options
 	if raw := strings.TrimSpace(f.raw); raw != "" {
 		data := []byte(raw)
 		if strings.HasPrefix(raw, "@") {
 			read, err := os.ReadFile(strings.TrimPrefix(raw, "@"))
 			if err != nil {
-				return nil, nil, nil, nil, usageError("--options: " + err.Error())
+				return options{}, usageError("--options: " + err.Error())
 			}
 			data = read
 		}
 		decoder := json.NewDecoder(strings.NewReader(string(data)))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&o); err != nil {
-			return nil, nil, nil, nil, usageError("--options is not valid: " + err.Error())
+			return options{}, usageError("--options is not valid: " + err.Error())
 		}
 	}
 	x := func() *apiv1.XOptions {
@@ -246,7 +249,7 @@ func (f *platformFlags) build() (*apiv1.XOptions, *apiv1.InstagramOptions, *apiv
 			o.Instagram.FirstComment = f.firstComment
 		}
 	}
-	return o.X, o.Instagram, o.TikTok, o.YouTube, nil
+	return o, nil
 }
 
 func newListPostsCommand(g *globals) *cobra.Command {
@@ -443,10 +446,11 @@ func newUpdatePostCommand(g *globals) *cobra.Command {
 				return usageError("--publish-now and --scheduled-at cannot be used together")
 			}
 			req := apiv1.UpdatePostRequest{AddPlatforms: addPlatforms, AddAccountIDs: addAccounts, RemoveAccountIDs: removeAccs, Profile: profile, PublishNow: publishNow}
-			var err error
-			if req.X, req.Instagram, req.TikTok, req.YouTube, err = options.build(); err != nil {
+			opts, err := options.build()
+			if err != nil {
 				return err
 			}
+			req.X, req.Instagram, req.TikTok, req.YouTube, req.Pinterest = opts.X, opts.Instagram, opts.TikTok, opts.YouTube, opts.Pinterest
 			if cmd.Flags().Changed("content") {
 				req.Content = &content
 			}

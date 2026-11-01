@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "postatron",
   "displayName": "Postatron",
-  "version": "1.7.0",
-  "description": "Schedule, publish and manage social media posts on X, Instagram, LinkedIn, TikTok, Facebook, Threads, Bluesky and YouTube, and see how they performed. Connects Postatron's remote MCP server and adds the Postatron skill.",
+  "version": "1.8.0",
+  "description": "Schedule, publish and manage social media posts on X, Instagram, LinkedIn, TikTok, Facebook, Threads, Bluesky, YouTube and Pinterest, and see how they performed. Connects Postatron's remote MCP server and adds the Postatron skill.",
   "author": {
     "name": "Postatron",
     "url": "https://postatron.com"
@@ -20,6 +20,7 @@
     "linkedin",
     "tiktok",
     "bluesky",
+    "pinterest",
     "mcp"
   ],
   "icon": "./assets/postatron-icon.png",

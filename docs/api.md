@@ -176,14 +176,15 @@ Choosing accounts:
 
 Content and media:
 
-- `content` is required; per-platform limits apply (X 280 characters, or 25,000 for X Premium accounts; Bluesky 300; Threads 500; LinkedIn 3,000; Facebook 63,206; Instagram 2,200; TikTok 2,200 for a video's caption and 4,000 for a photo post's description).
-  Each platform is judged on the text it receives, so `x.content`, `instagram.caption`, `tiktok.title` on a video and `tiktok.description` on photos are measured in place of `content`.
+- `content` is required; per-platform limits apply (X 280 characters, or 25,000 for X Premium accounts; Bluesky 300; Threads 500; LinkedIn 3,000; Facebook 63,206; Instagram 2,200; TikTok 2,200 for a video's caption and 4,000 for a photo post's description; Pinterest 800, as the Pin's description).
+  Each platform is judged on the text it receives, so `x.content`, `instagram.caption`, `tiktok.title` on a video, `tiktok.description` on photos and `pinterest.description` are measured in place of `content`.
   TikTok counts in UTF-16, so an emoji counts as two.
 - `media_urls`: public `https` links to images or one video, fetched by the server.
   Addresses inside a private network are refused.
 - `media_ids`: upload ids from `POST /v1/media/uploads`, for files on someone's own device.
 - Up to four media items across both, and a post cannot mix images and video.
 - Instagram and TikTok need an image or a video; YouTube needs a video.
+- Pinterest needs an image, two to four images for a carousel, or one video, and a board for every Pinterest account, named in `pinterest` or the account's default (see Pinterest boards below).
 - An account that cannot post until it is connected again (`status: "reconnect_required"` in `GET /v1/accounts`) is refused with `422 reconnect_required`, as the dashboard refuses it, rather than accepted only to fail when the post goes out.
 - `scheduled_at` is RFC 3339 and must be at least 5 minutes ahead; omit it to publish now.
 - `queue` (a name or id from `GET /v1/queues`) schedules the post for that queue's next free slot instead; it cannot be combined with `scheduled_at`.
@@ -192,7 +193,7 @@ Content and media:
 
 Platform options:
 
-`x`, `instagram`, `tiktok` and `youtube` hold what only that platform has, the same settings as the dashboard composer, checked by the same rules.
+`x`, `instagram`, `tiktok`, `youtube` and `pinterest` hold what only that platform has, the same settings as the dashboard composer, checked by the same rules.
 Each needs an account on its platform among the post's accounts.
 
 ```json
@@ -242,6 +243,11 @@ Each needs an account on its platform among the post's accounts.
 | YouTube | `category_id` | A YouTube category id, default `22` (People & Blogs); see below |
 | YouTube | `first_comment` | Not available yet: refused until Google verifies the permission it needs |
 | YouTube | `thumbnail_url`, `thumbnail_id` | A JPEG or PNG link, or an upload id, for a custom thumbnail |
+| Pinterest | `board` | The board to save the Pin to, by id or name, for every Pinterest account in the post; left out, each account's default board |
+| Pinterest | `boards` | For a post to several Pinterest accounts: each account id (from `GET /v1/accounts`) to its board, by id or name; wins over `board` for the accounts it names |
+| Pinterest | `title` | The Pin's title, up to 100 characters; left out, the first line of `content`, cut to 100 |
+| Pinterest | `description` | Replaces `content` as the Pin's description, up to 800 characters |
+| Pinterest | `link` | Where the Pin leads when someone taps it: a full `https` address, up to 2,048 characters |
 
 A TikTok post is published directly once it has a `privacy`, and TikTok then asks for its settings as a set: `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed` are required, plus `disable_duet` and `disable_stitch` for a video, and `your_brand` or `branded_content` when `commercial_content` is true.
 With `draft: true`, or with `tiktok` left out, the post goes to the creator's TikTok inbox instead, and they finish it in the TikTok app, which asks for the rest itself.
@@ -253,6 +259,24 @@ The categories a video can be given are `1` Film & Animation, `2` Autos & Vehicl
 YouTube first comments are switched off for now, so `youtube.first_comment` is refused; YouTube only lets verified channels set a custom thumbnail.
 A thumbnail cannot fail the post: the video is up before it is tried, so a refusal shows as the delivery's `error` on a `published` delivery, with `warning: true`.
 The same goes for an Instagram first comment.
+
+Pinterest boards:
+
+Every Pin is saved to one of the account's boards: `pinterest.board`, or `pinterest.boards` when the post goes to more than one Pinterest account.
+Left out, the account's default board is used, if one was chosen for it on the dashboard's Accounts page; `GET /v1/accounts` shows its id as `default_board_id`.
+A board can be given by its id or by its name, ignoring case, and is stored as its id.
+An unknown board is refused with `422 validation_error`; the message names the account and lists its boards, and `details.boards` holds their names, so ask the person which one they mean.
+A Pinterest account with no board named and no default is refused the same way, which is also how to see its boards.
+Pinterest only works with business accounts, so a personal account has to be switched to a (free) business account in Pinterest before it can be connected.
+
+```json
+{
+  "content": "Autumn soup in 20 minutes",
+  "platforms": ["pinterest"],
+  "media_urls": ["https://example.com/soup.jpg"],
+  "pinterest": { "board": "Recipes", "title": "Autumn soup", "link": "https://example.com/soup" }
+}
+```
 
 Response `201 Created`:
 
@@ -279,7 +303,7 @@ Every post, here and from the other endpoints, also carries:
 - `source`: where it was made, `dashboard`, `api` or `mcp`.
 - `created_by` and `updated_by`: `{id, name}` of the person who made it and of whoever last changed it; in a team they can differ.
 - `queue`: `{id, name}` of the queue that chose its time, when one did (`name` is empty once the queue is deleted).
-- `x`, `instagram`, `tiktok`, `youtube`: the platform options it was saved with, when it has any (a YouTube thumbnail comes back as `thumbnail_url`).
+- `x`, `instagram`, `tiktok`, `youtube`, `pinterest`: the platform options it was saved with, when it has any (a YouTube thumbnail comes back as `thumbnail_url`; Pinterest boards come back as ids in `boards`, keyed by account id, a default board included, and as `board` too when there is one Pinterest account).
 - `unpublished`: `{reason, due_at}` on a draft that came due and went back to the drafts instead of out.
   The only reason is `no_plan`: the account had no plan when the post was due.
   Nothing is lost; once there is a plan, schedule or publish it again with `PATCH /v1/posts/{id}`, which clears `unpublished`.
@@ -337,7 +361,7 @@ Query parameters, all optional:
 | Parameter | Values |
 | --- | --- |
 | `status` | `draft`, `scheduled`, `pending`, `processing`, `published`, `failed`, `partial` |
-| `platform` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube` |
+| `platform` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube`, `pinterest` |
 | `profile` | A profile id or name: only posts to its accounts |
 | `from`, `to` | RFC 3339; applies to `scheduled_at` for scheduled posts and `created_at` otherwise |
 | `limit` | 1 to 100, default 25 |
@@ -401,9 +425,10 @@ Every field is optional; what is left out keeps its value.
 
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
 Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
-The result is checked as a whole: Instagram and TikTok still need the post to have an image or a video, and at least one account must remain.
+The result is checked as a whole: Instagram, TikTok and Pinterest still need the post to have an image or a video, every Pinterest account needs a board (its default board, if it has one, when none is named), and at least one account must remain.
 Unless the post stays a draft, an account that cannot post until it is connected again is refused with `422 reconnect_required`.
-`x`, `instagram`, `tiktok` and `youtube` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
+`x`, `instagram`, `tiktok`, `youtube` and `pinterest` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
+A Pinterest account added without `pinterest` goes to its default board; one without a default needs `pinterest` in the same request, which then names a board for every Pinterest account the post will have.
 Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
 A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
 `publish_now: true` publishes straight away after the other changes, for a draft or a scheduled post, and cannot be combined with `scheduled_at`; the post comes back `processing`.
@@ -426,6 +451,8 @@ The link opens Postatron and starts that platform's sign-in; nothing is connecte
 It only works for the person whose key asked for it: signed in as someone else, the page refuses it.
 A team workspace key's link also opens the dashboard in that workspace.
 A plan whose account allowance is used up gets `402 quota_exceeded` instead of a link, and a profile that already has an account on that platform gets `409 conflict`.
+`platform` is one of `x`, `instagram`, `facebook`, `linkedin`, `tiktok`, `youtube`, `threads`, `bluesky` or `pinterest`.
+A Pinterest account must be a Pinterest business account; a free one will do, and a personal account can be switched in Pinterest's settings.
 
 To sign in again an account whose access has gone (`reconnect_required`, or a delivery with `error_code: "reconnect"`), pass its `account_id`; `platform` can then be left out.
 
@@ -456,6 +483,7 @@ Asking for a `platform` whose account in `profile` needs reconnecting does the s
 ```
 
 `status` is `connected` or `reconnect_required`: no sign-in stored, one the platform has refused, or one expired with nothing to renew it.
+A Pinterest account with a default board also has `default_board_id`, the board its Pins go to when a post names none.
 A post to a `reconnect_required` account is refused; `POST /v1/accounts/connect` with its `account_id` gives the link that fixes it.
 
 ### GET /v1/profiles
@@ -575,6 +603,7 @@ The numbers behind the dashboard's Analytics page.
 A metric a platform does not report is `null`, never a negative number.
 `top_posts` holds at most ten posts.
 YouTube's numbers are in `per_platform` as YouTube reports them, but YouTube's API policies keep them out of engagement totals, engagement rates and `top_posts`.
+X and Pinterest are not included; their accounts come back with `status: "unsupported"` and the reason.
 Each account is read from its platform at most once an hour: `last_sync_at` is when the oldest numbers were read and `next_sync_at` when they will be read again, so asking sooner returns the same report.
 
 ### GET /v1/events

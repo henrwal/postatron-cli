@@ -61,7 +61,7 @@ postatron create-post --content "New in store" --platforms x,instagram --profile
 | `--platforms` | Platforms to post to; the account on each in `--profile`. |
 | `--account-ids` | Specific accounts from `list-accounts`, instead of `--platforms`. |
 | `--profile` | Profile name or id. Needed with `--platforms` once a platform has accounts in more than one profile. |
-| `--media-urls` | Public `https` links to images or one video, up to four. Instagram and TikTok need one; YouTube needs a video. |
+| `--media-urls` | Public `https` links to images or one video, up to four. Instagram, TikTok and Pinterest need one; YouTube needs a video. |
 | `--media-ids` | Upload ids from the API's upload endpoint. |
 | `--scheduled-at` | RFC 3339, at least 5 minutes ahead. Omit to publish now. |
 | `--queue` | A queue name or id: the post takes its next free slot. |
@@ -78,7 +78,13 @@ postatron create-post --content "Tea or coffee?" --platforms x --poll "Tea,Coffe
 postatron create-post --content "1/ A thread" --platforms x --thread "2/ More" --thread "3/ The end"
 postatron create-post --content "New reel" --platforms instagram --media-urls https://example.com/r.mp4 \
   --options '{"instagram":{"post_type":"reel","trial_reel":"manual"}}'
+postatron create-post --content "Autumn soup in 20 minutes" --platforms pinterest --media-urls https://example.com/soup.jpg \
+  --options '{"pinterest":{"board":"Recipes","title":"Autumn soup","link":"https://example.com/soup"}}'
 ```
+
+A post to Pinterest goes to the account's default board, set on the dashboard's Accounts page, unless `--options` names another: `pinterest.board` by id or by name, or `pinterest.boards` (account id to board) for several Pinterest accounts.
+An unknown board is refused with the account's board names listed, and so is a post with no board and no default.
+`pinterest.title` takes up to 100 characters (by default the first line of `--content`), `pinterest.description` up to 800 in place of `--content`, and `pinterest.link` is where the Pin leads.
 
 An account that needs reconnecting is refused with `reconnect_required`; `connect-account --account-id` gives the link that fixes it.
 
@@ -139,6 +145,7 @@ postatron connect-account --account-id 1784140000000
 ```
 
 Prints a link that connects an account; the person opens it while signed in to Postatron.
+The platform is `x`, `instagram`, `facebook`, `linkedin`, `tiktok`, `youtube`, `threads`, `bluesky` or `pinterest`; a Pinterest account must be a business account, and a free one will do.
 With `--account-id` it signs a connected account in again instead, in its own profile, for one whose access has gone.
 
 ### list-posts
@@ -229,7 +236,7 @@ postatron get-analytics --source postatron
 ```
 
 Flags: `--range` (`7d`, `30d`, `90d` or `365d`), `--platform`, `--account-id`, `--profile`, `--source` (`all` or `postatron`).
-X is not included, because X bills per read.
+X is not included, because X bills per read, and nor is Pinterest.
 YouTube's numbers are in the per-platform totals, but YouTube's policies keep them out of engagement rates and top posts.
 Each account is read at most once an hour; the report says when it was last read and will be next.
 

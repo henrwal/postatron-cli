@@ -58,7 +58,7 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | Field | Notes |
 | --- | --- |
 | `content` | Required. |
-| `platforms` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube`. The account on each, in `profile`. |
+| `platforms` | `x`, `linkedin`, `bluesky`, `threads`, `facebook`, `instagram`, `tiktok`, `youtube`, `pinterest`. The account on each, in `profile`. |
 | `account_ids` | Instead of `platforms`: ids from `/v1/accounts`. |
 | `profile` | Profile name (any case) or id. Required with `platforms` when a platform has accounts in more than one profile. |
 | `media_urls` | Public https links, up to four. |
@@ -69,6 +69,7 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | `instagram` | `post_type`, `caption`, `first_comment`, `collaborators`, `user_tags`, `ai_generated`, `trial_reel`. |
 | `tiktok` | `title`, `description`, `draft`, `privacy`, `disable_comment`, `disable_duet`, `disable_stitch`, `commercial_content`, `your_brand`, `branded_content`, `music_usage_confirmed`, `auto_add_music`, `ai_generated`. A direct post needs all the required ones; a `draft` (or no block) goes to the creator's inbox. |
 | `youtube` | `title`, `description`, `privacy` (`public`, `unlisted`, `private`), `made_for_kids`, `tags`, `category_id`, `thumbnail_url` or `thumbnail_id`. `first_comment` is refused for now. |
+| `pinterest` | `board` (a board's name or id, for every Pinterest account) or `boards` (`{account_id: board}`, which wins for the accounts it names), `title` (up to 100, default the first line of `content`), `description` (up to 800, replacing `content`), `link`. Left out, the board is the account's default (`default_board_id`); an unknown board, or none and no default, is refused with the account's board names in `details.boards`. |
 
 ## Reading a post
 

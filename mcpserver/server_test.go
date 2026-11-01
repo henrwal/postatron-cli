@@ -430,3 +430,35 @@ func TestDeletePostsAndPlatformOptions(t *testing.T) {
 	assert.Equal(t, "following", ops.created[0].X.ReplySettings)
 	assert.Equal(t, "manual", ops.created[0].Instagram.TrialReel)
 }
+
+// A Pin's board, by name or per account, reaches the API untouched; the
+// server resolves names, so the stdio server never needs to list boards.
+func TestPinterestOptionsReachTheAPI(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "create_post", Arguments: map[string]any{
+		"content": "Autumn soup", "platforms": []any{"pinterest"}, "media_urls": []any{"https://example.com/soup.jpg"},
+		"pinterest": map[string]any{"board": "Recipes", "boards": map[string]any{"acc-2": "Travel"}, "title": "Soup", "link": "https://example.com/soup"},
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.created, 1)
+	pin := ops.created[0].Pinterest
+	require.NotNil(t, pin)
+	assert.Equal(t, "Recipes", pin.Board)
+	assert.Equal(t, map[string]string{"acc-2": "Travel"}, pin.Boards)
+	assert.Equal(t, "Soup", pin.Title)
+	assert.Equal(t, "https://example.com/soup", pin.Link)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "update_post", Arguments: map[string]any{
+		"post_id": "p1", "pinterest": map[string]any{"board": "Dinners", "description": "Ready in 20 minutes"},
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, ops.updated, 1)
+	require.NotNil(t, ops.updated[0].Pinterest)
+	assert.Equal(t, "Dinners", ops.updated[0].Pinterest.Board)
+	assert.Equal(t, "Ready in 20 minutes", ops.updated[0].Pinterest.Description)
+}

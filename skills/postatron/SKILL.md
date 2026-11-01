@@ -1,6 +1,6 @@
 ---
 name: postatron
-description: Schedule, publish and manage social media posts through Postatron on X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok and YouTube, and read how they performed. Use when someone asks to post or schedule something to social media ("schedule this to LinkedIn and X tomorrow at 9am"), to see or cancel scheduled posts, to check whether a post went out, or to look at engagement, reach or plan usage.
+description: Schedule, publish and manage social media posts through Postatron on X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok, YouTube and Pinterest, and read how they performed. Use when someone asks to post or schedule something to social media ("schedule this to LinkedIn and X tomorrow at 9am"), to see or cancel scheduled posts, to check whether a post went out, or to look at engagement, reach or plan usage.
 ---
 
 # Postatron
@@ -40,7 +40,7 @@ Work through these in order.
      Take the offset from the conversation, or from `date +%z` on their machine. If you cannot tell their timezone, ask.
    - "Tomorrow" means tomorrow in their timezone, not in UTC.
    - It must be at least 5 minutes ahead.
-4. **Check the content.** See the limits below. Instagram and TikTok need an image or video, YouTube a video.
+4. **Check the content.** See the limits below. Instagram and TikTok need an image or video, YouTube a video, and Pinterest an image or video saved to a board.
 5. **Attach media** if there is any; see Media.
 6. **Add platform options** when the person asks for them; see Platform options.
 7. **Confirm when anything was inferred.** If you chose the profile, account or time yourself, or the post goes out immediately, show the text, the accounts as `@handle on Platform`, and the time in the person's timezone, then wait for a yes. A fully specified request to schedule can go straight through.
@@ -77,6 +77,7 @@ postatron create-post --json --content "..." --platforms linkedin,x --scheduled-
 | Instagram | 2,200 | an image or a video, required |
 | TikTok | 2,200 (a photo post's description 4,000) | an image or a video, required |
 | YouTube | | a video, required |
+| Pinterest | 800 (the Pin's description) | an image, two to four for a carousel, or one video, required |
 
 When one text is too long for one platform, say which and offer a shorter version for it as a separate post, rather than cutting it silently.
 
@@ -88,7 +89,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 
 ## Platform options
 
-`create_post` and `update_post` take `x`, `instagram`, `tiktok` and `youtube` objects for what only that platform has.
+`create_post` and `update_post` take `x`, `instagram`, `tiktok`, `youtube` and `pinterest` objects for what only that platform has.
 Use them when the person asks; never add one they did not ask for.
 
 - **X thread**: "make it a thread" means `x.thread`, a list of `{content}` for the tweets after the first, each within 280 characters. Each tweet counts against the quota as its own post, so say how many. A thread cannot go into a Community.
@@ -98,6 +99,7 @@ Use them when the person asks; never add one they did not ask for.
 - **Instagram**: `post_type` (`reel`, `story`, `carousel`, `feed`), `first_comment` (hashtags often go here), `collaborators` (up to 3 usernames), `trial_reel` (`manual` or `performance`).
 - **TikTok**: `title` is a video's caption (up to 2,200) or a photo post's title (up to 90), and `description` a photo post's text (up to 4,000). To publish directly, TikTok needs `privacy`, `disable_comment`, `commercial_content` and `music_usage_confirmed`, plus `disable_duet` and `disable_stitch` for a video; `auto_add_music` (photos) and `ai_generated` are optional. Ask the person for privacy and the commercial disclosure, and show them TikTok's declaration, "By posting, you agree to TikTok's Music Usage Confirmation" (with branded content, "...TikTok's Branded Content Policy and Music Usage Confirmation"), before setting `music_usage_confirmed`; never choose those for them. `draft: true`, or leaving `tiktok` out, sends the post to their TikTok inbox to finish in the app instead; a draft takes only `title` and `description` on photos, and nothing on a video.
 - **YouTube**: `title` (up to 100 characters, defaults to the first line), `description` (replaces the text), `privacy` (`public` by default, `unlisted` or `private`), `made_for_kids`, `tags`, `category_id` and `thumbnail_url`. YouTube asks every uploader whether a video is made for kids: ask the person rather than choosing. No `<` or `>` in a title or description. `first_comment` is not available on YouTube yet and is refused, so leave it out. A custom thumbnail needs a verified channel; if it is refused the video still goes up, and the delivery is `published` with `warning: true` and an `error` saying why.
+- **Pinterest**: every Pin is saved to a board: `pinterest.board`, by the board's name or id, or `pinterest.boards` (each account id to its board) for several Pinterest accounts. Use the board the person named. If they named none, the account's default board is used when it has one (`default_board_id` in `list_accounts`); otherwise ask. An unknown board is refused and the error lists the account's boards (`details.boards`), so offer those names rather than guessing; no board and no default gets the same list. `title` (up to 100 characters, by default the first line of the text), `description` (up to 800, replacing the text) and `link` (where the Pin leads) are optional. Only Pinterest business accounts can be connected; a free one will do.
 
 `update_post` replaces one platform's options as a whole: send the full set you want, or `{}` to clear them.
 
@@ -152,7 +154,7 @@ A post or edit to an account that cannot post is refused up front with `reconnec
 - When a platform they ask for is not connected, call `connect_account` and give them the `connect_url`. Nothing is connected until they finish signing in there, so wait for them to say so, then check with `list_accounts`.
 - `delete_post` cancels a draft or scheduled post. On a published post it only removes it from Postatron: **it stays live on the platform**. Say so plainly before deleting one, and after, so nobody thinks it has gone from X or Instagram. A post publishing now, or due within two minutes, cannot be deleted.
 - `get_post` says who made a post (`created_by`), who last changed it (`updated_by`) and which queue placed it (`queue`). In a team they can be different people.
-- Analytics has no X numbers: X charges per read, so Postatron does not fetch them. A metric a platform does not report is `null`; say "not reported", not zero.
+- Analytics has no X or Pinterest numbers: X charges per read, so Postatron does not fetch them, and Pinterest analytics are not available yet. A metric a platform does not report is `null`; say "not reported", not zero.
 
 ## Errors
 

@@ -440,4 +440,18 @@ func TestDeletePostsAndOptions(t *testing.T) {
 
 	_, err = run(t, ops, "create-post", "--content", "x", "--platforms", "x", "--options", `{"x":{"polll":{}}}`)
 	require.Error(t, err, "a misspelt option is refused rather than ignored")
+
+	_, err = run(t, ops, "create-post", "--content", "Autumn soup", "--platforms", "pinterest", "--media-urls", "https://example.com/soup.jpg",
+		"--options", `{"pinterest":{"board":"Recipes","title":"Soup","link":"https://example.com/soup"}}`)
+	require.NoError(t, err)
+	require.Len(t, ops.created, 2)
+	require.NotNil(t, ops.created[1].Pinterest)
+	assert.Equal(t, "Recipes", ops.created[1].Pinterest.Board)
+	assert.Equal(t, "https://example.com/soup", ops.created[1].Pinterest.Link)
+
+	_, err = run(t, ops, "update-post", "p_123", "--options", `{"pinterest":{"boards":{"acc-pin":"Travel"}}}`)
+	require.NoError(t, err)
+	require.Len(t, ops.updated, 1)
+	require.NotNil(t, ops.updated[0].Pinterest)
+	assert.Equal(t, map[string]string{"acc-pin": "Travel"}, ops.updated[0].Pinterest.Boards)
 }

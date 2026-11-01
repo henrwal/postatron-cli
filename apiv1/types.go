@@ -97,7 +97,8 @@ type ErrorDetail struct {
 //
 // MediaURLs are public https links the server downloads; MediaIDs are upload
 // ids from CreateUpload. Instagram and TikTok need at least one image or
-// video, YouTube a video.
+// video, YouTube a video, and Pinterest an image (several make a carousel)
+// or one video, saved to a board (PinterestOptions).
 type CreatePostRequest struct {
 	Content     string     `json:"content"`
 	AccountIDs  []string   `json:"account_ids,omitempty"`
@@ -111,12 +112,15 @@ type CreatePostRequest struct {
 	// in the queue's profile, which is also what Platforms means when Profile
 	// is left out.
 	Queue string `json:"queue,omitempty"`
-	// X, Instagram, TikTok and YouTube hold the options only that platform
-	// has. Each needs an account on its platform among the post's accounts.
+	// X, Instagram, TikTok, YouTube and Pinterest hold the options only that
+	// platform has. Each needs an account on its platform among the post's
+	// accounts. A Pinterest account with no default board needs Pinterest,
+	// to name its board.
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
 	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
+	Pinterest *PinterestOptions `json:"pinterest,omitempty"`
 }
 
 // X reply audiences for XOptions.ReplySettings. Empty means everyone.
@@ -290,6 +294,39 @@ type YouTubeOptions struct {
 	ThumbnailID  string `json:"thumbnail_id,omitempty"`
 }
 
+// PinterestOptions are the settings a Pin has. Every Pin is saved to one of
+// the account's boards: the one named here, or else the account's default
+// board (Account.DefaultBoardID), set in the dashboard. A post to Pinterest
+// also needs an image, or two to four for a carousel (a post takes four
+// media items), or one video, since Pinterest has no text-only Pins.
+//
+// A board is given by its id or by its name, ignoring case. An unknown one
+// is refused with validation_error, and the message and details.boards list
+// the names of the account's boards, so ask the person which they mean
+// rather than guessing. A Pinterest account with no board named and no
+// default is refused the same way, which is also how to learn its boards.
+// The account must be a Pinterest business account (a free one will do).
+type PinterestOptions struct {
+	// Board is the board, by id or name, for every Pinterest account in the
+	// post. Left out, each account's default board is used.
+	Board string `json:"board,omitempty"`
+	// Boards maps a Pinterest account id (from ListAccounts) to its board,
+	// by id or name, for a post to several Pinterest accounts. It wins over
+	// Board for the accounts it names. When a post is read back, Boards holds
+	// each account's board id, and Board too when there is only one.
+	Boards map[string]string `json:"boards,omitempty"`
+	// Title is the Pin's title, up to 100 characters. Left out, it is the
+	// first line of the content, cut to 100 characters.
+	Title string `json:"title,omitempty"`
+	// Description replaces the content as the Pin's description, up to 800
+	// characters. Left out, the content is the description, so it must fit
+	// in 800.
+	Description string `json:"description,omitempty"`
+	// Link is where the Pin leads when someone taps it: a full http or https
+	// address, up to 2048 characters.
+	Link string `json:"link,omitempty"`
+}
+
 // UpdatePostRequest is the body of PATCH /v1/posts/{id}. Every field is
 // optional and anything left out keeps its value. A draft or a scheduled post
 // can change; once it has started publishing it is fixed. A draft stays a
@@ -311,18 +348,22 @@ type UpdatePostRequest struct {
 	RemoveAccountIDs []string `json:"remove_account_ids,omitempty"`
 	// Profile chooses which brand AddPlatforms means.
 	Profile string `json:"profile,omitempty"`
-	// X, Instagram, TikTok and YouTube replace that platform's options as a
-	// whole; an empty object ({}) clears them.
+	// X, Instagram, TikTok, YouTube and Pinterest replace that platform's
+	// options as a whole; an empty object ({}) clears them, and a Pinterest
+	// account then uses its default board. A Pinterest account added without
+	// Pinterest is saved to its default board, and needs one.
 	X         *XOptions         `json:"x,omitempty"`
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
 	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
+	Pinterest *PinterestOptions `json:"pinterest,omitempty"`
 }
 
 // ConnectAccountRequest is the body of POST /v1/accounts/connect.
 type ConnectAccountRequest struct {
 	// Platform is the network to connect: x, instagram, facebook, linkedin,
-	// tiktok, youtube, threads or bluesky.
+	// tiktok, youtube, threads, bluesky or pinterest. A Pinterest account
+	// must be a business account (a free one will do).
 	Platform string `json:"platform"`
 	// Profile is the profile (name or id) the new account goes into.
 	Profile string `json:"profile,omitempty"`
@@ -414,6 +455,7 @@ type Post struct {
 	Instagram *InstagramOptions `json:"instagram,omitempty"`
 	TikTok    *TikTokOptions    `json:"tiktok,omitempty"`
 	YouTube   *YouTubeOptions   `json:"youtube,omitempty"`
+	Pinterest *PinterestOptions `json:"pinterest,omitempty"`
 }
 
 // PostAuthor names a person on the account. Name is empty when the person
@@ -497,6 +539,10 @@ type Account struct {
 	ProfileID   string    `json:"profile_id"`
 	ProfileName string    `json:"profile_name"`
 	ConnectedAt time.Time `json:"connected_at"`
+	// DefaultBoardID is, for a Pinterest account, the id of the board its
+	// Pins go to when a post names none, as chosen in the dashboard. Empty
+	// when it has none, and a post to it then needs PinterestOptions.Board.
+	DefaultBoardID string `json:"default_board_id,omitempty"`
 }
 
 // AccountList is the response of GET /v1/accounts.

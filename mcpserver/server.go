@@ -52,7 +52,7 @@ const (
 	descListQueues = "List posting queues: weekly time slots per profile, each with its next free slot (next_slot). " +
 		"Pass a queue's name to create_post as queue to schedule a post into that slot instead of choosing a time."
 	descCreatePost = "Publish a post now, schedule it, or add it to a queue. Omit scheduled_at and queue to publish immediately. " +
-		"Instagram and TikTok need an image or a video, YouTube a video. A post to N accounts uses N destination-posts of the monthly quota. " +
+		"Instagram and TikTok need an image or a video, YouTube a video, and Pinterest an image or a video and a board. A post to N accounts uses N destination-posts of the monthly quota. " +
 		"An account that needs reconnecting is refused with reconnect_required; give the person connect_account's link for it."
 	descListPosts = "List posts, most recent first, filtered by status, platform, profile or date. A draft with unpublished.reason no_plan came due while the account " +
 		"had no plan and went back to the drafts; once there is a plan, schedule or publish it with update_post."
@@ -68,7 +68,7 @@ const (
 		"it stays live on the platforms and the person has to delete it there, so tell them. A post publishing now, or due within two minutes, cannot be deleted."
 	descUpdatePost = "Change a draft or scheduled post: its text, its time, or the accounts it goes to. Use add_platforms (e.g. [\"instagram\"]) when the person wants a post they already have on another platform too, " +
 		"rather than a second create_post, so it stays one post. A draft (list_posts with status draft) goes out with scheduled_at or publish_now; otherwise it stays a draft. " +
-		"publish_now posts to the person's real accounts at once, so confirm first. Accounts added count against the monthly quota like a new post. Instagram and TikTok need the post to have an image or a video."
+		"publish_now posts to the person's real accounts at once, so confirm first. Accounts added count against the monthly quota like a new post. Instagram, TikTok and Pinterest need the post to have an image or a video, and Pinterest a board."
 	descRetryPost = "Send a failed or partial post again to the accounts it failed on. An account it already published to is never posted to twice. " +
 		"Check each failed delivery's error_code (get_post) first: reconnect needs connect_account with that account_id before a retry, rate_limited may need a wait, " +
 		"and media_rejected or validation will fail the same way, since a retry sends the same post. It posts to the person's real accounts, so confirm first. " +
@@ -83,7 +83,7 @@ const (
 		"Use it to find what failed recently and why; retry_post sends a failed post again."
 	descGetAnalytics = "How the user's posts and accounts are performing over the last 7, 30, 90 or 365 days: engagement rate, " +
 		"reach, followers, totals per platform, the best posts, and any account that needs reconnecting. " +
-		"Metrics a platform does not report come back as null. X is not included. YouTube's numbers are in the per-platform totals as YouTube reports them, " +
+		"Metrics a platform does not report come back as null. X and Pinterest are not included. YouTube's numbers are in the per-platform totals as YouTube reports them, " +
 		"but YouTube's policies keep them out of engagement totals, rates and top_posts. Each account is read at most once an hour (last_sync_at, next_sync_at)."
 	descGetUsage = "How much of the current billing period's post quota has been used, and what the plan allows."
 )
@@ -102,6 +102,7 @@ type CreatePostInput struct {
 	Instagram   *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Instagram-only options: post_type (auto, feed, story, reel or carousel), caption (Instagram-only text), first_comment, collaborators (up to 3 usernames), user_tags, ai_generated, trial_reel (manual or performance, reels only)."`
 	TikTok      *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"TikTok settings. With privacy the post is published directly, and TikTok needs disable_comment, commercial_content and music_usage_confirmed, plus disable_duet and disable_stitch for a video. Ask the person for these rather than choosing them. With draft, or with no tiktok block, it goes to the creator's TikTok inbox to finish in the app. title is a video's caption (up to 2200, replacing content) or a photo post's title (up to 90); description is a photo post's text (up to 4000); privacy is public_to_everyone, mutual_follow_friends, follower_of_creator or self_only. music_usage_confirmed is the person accepting TikTok's declaration: show them \"By posting, you agree to TikTok's Music Usage Confirmation\" (with branded_content: \"...TikTok's Branded Content Policy and Music Usage Confirmation\") and never agree for them."`
 	YouTube     *apiv1.YouTubeOptions   `json:"youtube,omitempty" jsonschema:"YouTube options: title (up to 100 characters, no < or >; default the first line of content), description (replaces content, up to 5000 bytes, no < or >), privacy (public, unlisted or private; default public), made_for_kids (ask the person), tags, category_id (default 22, People & Blogs), thumbnail_url or thumbnail_id (JPEG or PNG; verified channels only). first_comment is not available yet: it is refused until Google verifies the scope it needs, so leave it out."`
+	Pinterest   *apiv1.PinterestOptions `json:"pinterest,omitempty" jsonschema:"Pinterest options: board (the board to save the Pin to, by name or id; left out, each account's default board; an unknown one, or none at all, is refused with the account's board names, so ask the person which), boards (for several Pinterest accounts, each account id from list_accounts to its board; wins over board), title (up to 100 characters; default the first line of content), description (replaces content, up to 800 characters), link (where the Pin leads, a full https address)."`
 }
 
 // UpdatePostInput is the update_post tool input.
@@ -118,6 +119,7 @@ type UpdatePostInput struct {
 	Instagram        *apiv1.InstagramOptions `json:"instagram,omitempty" jsonschema:"Replaces the post's Instagram options as a whole; {} clears them."`
 	TikTok           *apiv1.TikTokOptions    `json:"tiktok,omitempty" jsonschema:"Replaces the post's TikTok settings as a whole; {} clears them."`
 	YouTube          *apiv1.YouTubeOptions   `json:"youtube,omitempty" jsonschema:"Replaces the post's YouTube options as a whole; {} clears them."`
+	Pinterest        *apiv1.PinterestOptions `json:"pinterest,omitempty" jsonschema:"Replaces the post's Pinterest options as a whole, boards included (see create_post); {} clears them, and each Pinterest account then uses its default board."`
 }
 
 // RetryPostInput is the retry_post tool input.
@@ -159,7 +161,7 @@ type QueueInput struct {
 
 // ConnectAccountInput is the connect_account tool input.
 type ConnectAccountInput struct {
-	Platform  string `json:"platform,omitempty" jsonschema:"The network to connect: x, instagram, facebook, linkedin, tiktok, youtube, threads or bluesky. Optional with account_id."`
+	Platform  string `json:"platform,omitempty" jsonschema:"The network to connect: x, instagram, facebook, linkedin, tiktok, youtube, threads, bluesky or pinterest (a Pinterest business account). Optional with account_id."`
 	Profile   string `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles to put the account in. Omit for the Default profile."`
 	AccountID string `json:"account_id,omitempty" jsonschema:"A connected account's id, to sign that account in again where it is, instead of connecting a new one."`
 }
@@ -275,6 +277,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 				Instagram:  in.Instagram,
 				TikTok:     in.TikTok,
 				YouTube:    in.YouTube,
+				Pinterest:  in.Pinterest,
 			}
 			if strings.TrimSpace(in.ScheduledAt) != "" {
 				when, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ScheduledAt))
@@ -392,6 +395,7 @@ func New(ops apiv1.Operations) *mcp.Server {
 				Instagram:        in.Instagram,
 				TikTok:           in.TikTok,
 				YouTube:          in.YouTube,
+				Pinterest:        in.Pinterest,
 			}
 			if content := strings.TrimSpace(in.Content); content != "" {
 				req.Content = &content
