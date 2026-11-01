@@ -32,6 +32,14 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `POST` | `/v1/webhooks/{id}/test` | Send a signed `webhook.test` event now | `posts:write` |
 | `POST` | `/v1/webhooks/{id}/rotate-secret` | A new signing secret; the old one signs beside it for a day | `posts:write` |
 
+## OpenAPI
+
+The API is also described in OpenAPI 3.1, at `https://api.postatron.com/v1/openapi.json`.
+That address needs no key and no plan.
+The description covers every route above, with its parameters, bodies and errors, the rate limit and idempotency headers, and every webhook event with its headers.
+Each operation's security requirement names the scope it needs, and `x-postatron-rate-limit` names its rate limit class.
+Point a code generator or an agent at it for a typed client, or read it from this module as `apiv1.OpenAPI` (`apiv1/openapi.json`).
+
 ## Authentication
 
 Create a key in the dashboard under **API & MCP** (`/dashboard/api`).

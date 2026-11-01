@@ -136,9 +136,15 @@ Claude Desktop, in `claude_desktop_config.json`:
 
 Details in [docs/mcp.md](docs/mcp.md).
 
+## OpenAPI
+
+The REST API is described in OpenAPI 3.1 at [api.postatron.com/v1/openapi.json](https://api.postatron.com/v1/openapi.json), webhooks included, and fetching it needs no key.
+Use it to generate a client in any language, or hand it to an agent; in Go the same document is `apiv1.OpenAPI`.
+
 ## Documentation
 
 - [docs/api.md](docs/api.md) - REST API reference, auth, rate limits, errors.
+- [apiv1/openapi.json](apiv1/openapi.json) - the OpenAPI 3.1 description the API serves.
 - [docs/mcp.md](docs/mcp.md) - MCP tools and client setup.
 - [docs/cli.md](docs/cli.md) - every command and flag.
 
