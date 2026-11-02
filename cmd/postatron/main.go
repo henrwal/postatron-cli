@@ -871,7 +871,7 @@ func newGetAnalyticsCommand(g *globals) *cobra.Command {
 func newGetUsageCommand(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get-usage",
-		Short: "Show this month's quota and posts per platform",
+		Short: "Show this month's X post caps, posts per platform and limits",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report, err := g.ops().GetUsage(cmd.Context())
 			if err != nil {
@@ -1019,13 +1019,9 @@ func printPostList(w io.Writer, list apiv1.PostList) {
 func printUsage(w io.Writer, r apiv1.UsageReport) {
 	fmt.Fprintf(w, "Plan: %s (%s, %s)  Period: %s to %s\n", r.Plan.Name, r.Plan.Interval, strings.ToLower(r.Plan.Status),
 		r.Period.Start.Format("2006-01-02"), r.Period.End.Add(-time.Second).Format("2006-01-02"))
-	fmt.Fprintf(w, "Destination-posts: %d / %d (%d remaining)\n", r.DestinationPosts.Used, r.DestinationPosts.Limit, r.DestinationPosts.Remaining)
-	if r.XLinkPosts.Limit > 0 {
-		fmt.Fprintf(w, "X link posts:      %d / %d (%d remaining)\n", r.XLinkPosts.Used, r.XLinkPosts.Limit, r.XLinkPosts.Remaining)
-	} else {
-		// Counted for visibility, but no longer capped.
-		fmt.Fprintf(w, "X link posts:      %d (no cap)\n", r.XLinkPosts.Used)
-	}
+	fmt.Fprintf(w, "Destination-posts: %s\n", counterText(r.DestinationPosts))
+	fmt.Fprintf(w, "X posts:           %s\n", counterText(r.XPosts))
+	fmt.Fprintf(w, "X link posts:      %s\n", counterText(r.XLinkPosts))
 	fmt.Fprintf(w, "Link posts (all):  %d\n", r.LinkPosts.Used)
 	fmt.Fprintf(w, "Accounts:          %d / %d\n", r.Plan.ConnectedAccounts, r.Plan.MaxConnectedAccounts)
 	writes := r.RateLimits.WritesPerMinute
@@ -1048,6 +1044,19 @@ func printUsage(w io.Writer, r apiv1.UsageReport) {
 		}
 		_ = tw.Flush()
 	}
+}
+
+// counterText is "12 / 300 (288 remaining)" for a capped counter, and
+// "12 (no cap)" for one the plan does not cap.
+func counterText(c apiv1.UsageCounter) string {
+	if !c.Capped() {
+		return fmt.Sprintf("%d (no cap)", c.Used)
+	}
+	remaining := 0
+	if c.Remaining != nil {
+		remaining = *c.Remaining
+	}
+	return fmt.Sprintf("%d / %d (%d remaining)", c.Used, *c.Limit, remaining)
 }
 
 func printAnalytics(w io.Writer, r apiv1.AnalyticsReport) {

@@ -114,7 +114,7 @@ postatron update-post 0AbCdEfGhIjKlMnOpQrS --add-platforms linkedin --publish-no
 | `--profile` | Which profile `--add-platforms` means. |
 
 It takes the same platform flags as `create-post`; each replaces that platform's options as a whole.
-Accounts added count against the monthly quota like a new post.
+Accounts added are counted like a new post, so an X account added counts against the monthly X post cap.
 
 ### retry-post
 
@@ -125,7 +125,7 @@ postatron retry-post 0AbCdEfGhIjKlMnOpQrS
 postatron retry-post 0AbCdEfGhIjKlMnOpQrS --account-ids 1784140000000
 ```
 
-An account it already published to is never posted to twice, and a retry is not charged against the quota again.
+An account it already published to is never posted to twice, and a retry is not counted against the X caps again.
 `get-post` shows each failure's code in brackets, which says whether a retry can work: `reconnect` needs `connect-account --account-id` first, `media_rejected` and `validation` need a new post (see the API reference's Deliveries section).
 An account that still needs reconnecting is refused, and nothing is sent.
 
@@ -221,8 +221,9 @@ postatron get-usage
 
 ```text
 Plan: Starter (month, active)  Period: 2026-09-01 to 2026-09-30
-Destination-posts: 12 / 300 (288 remaining)
-X link posts:      1 (no cap)
+Destination-posts: 12 (no cap)
+X posts:           7 / 300 (293 remaining)
+X link posts:      1 / 30 (29 remaining)
 Link posts (all):  4
 Accounts:          2 / 5
 Rate limits:       30 writes, 60 reads, 120 uploads per minute

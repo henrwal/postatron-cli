@@ -139,9 +139,9 @@ Logs go to stderr; stdout carries the protocol and must stay clean.
 
 ## Worked example
 
-> **You:** What have I got connected, and how much of my quota is left?
+> **You:** What have I got connected, and how many X posts have I got left?
 >
-> **Claude** calls `list_profiles` and `get_usage`, then answers: "Your Default profile has X (@henry) and LinkedIn; Acme has X (@acmehq) and Instagram. This month you've used 42 of 300 destination-posts."
+> **Claude** calls `list_profiles` and `get_usage`, then answers: "Your Default profile has X (@henry) and LinkedIn; Acme has X (@acmehq) and Instagram. This month you've posted 42 times, 12 of them to X, so 288 of your 300 X posts are left; posts to the other platforms are unlimited."
 >
 > **You:** Schedule "New season, new shoes." with this photo to Acme's Instagram and X for Wednesday at 9am UK time.
 >

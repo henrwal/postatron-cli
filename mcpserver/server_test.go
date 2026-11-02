@@ -136,7 +136,10 @@ func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
 	if f.usageErr != nil {
 		return nil, f.usageErr
 	}
-	return &apiv1.UsageReport{Plan: apiv1.UsagePlan{Code: "STARTER"}, ByPlatform: map[string]int{"x": 3}}, nil
+	return &apiv1.UsageReport{
+		Plan: apiv1.UsagePlan{Code: "STARTER"}, ByPlatform: map[string]int{"x": 3},
+		DestinationPosts: apiv1.UncappedCounter(3), XPosts: apiv1.CappedCounter(3, 300), XLinkPosts: apiv1.CappedCounter(0, 30),
+	}, nil
 }
 
 func connect(t *testing.T, ops apiv1.Operations) *mcp.ClientSession {
@@ -304,7 +307,10 @@ func TestReadToolsAndErrors(t *testing.T) {
 
 	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_usage", Arguments: map[string]any{}})
 	require.NoError(t, err)
+	assert.False(t, res.IsError)
 	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"STARTER"`)
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"destination_posts":{"limit":null,"remaining":null,"used":3}`, "posts have no cap")
+	assert.Contains(t, res.Content[0].(*mcp.TextContent).Text, `"x_posts":{"limit":300,"remaining":297,"used":3}`)
 
 	ops.usageErr = errors.New("network down")
 	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_usage", Arguments: map[string]any{}})

@@ -21,7 +21,7 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `POST` | `/v1/queues` | Create a queue | `posts:write` |
 | `PATCH` | `/v1/queues/{id}` | Change, pause or resume a queue | `posts:write` |
 | `DELETE` | `/v1/queues/{id}` | Delete a queue | `posts:write` |
-| `GET` | `/v1/usage` | Quota used and remaining, posts per platform | `usage:read` |
+| `GET` | `/v1/usage` | Posts per platform, and the X caps used and remaining | `usage:read` |
 | `GET` | `/v1/analytics` | Engagement, reach, followers and best posts | `posts:read` |
 | `POST` | `/v1/media/uploads` | A link a person uses to attach a file from their device | `posts:write` |
 | `GET` | `/v1/media/uploads/{id}` | Whether that file has arrived | `posts:read` |
@@ -85,30 +85,33 @@ An unknown profile is a `422 validation_error` whose `details.profiles` lists th
 
 ## Quota and metering
 
-Usage is metered in **destination-posts**: one post delivered to one account.
-A post sent to X, LinkedIn and Bluesky consumes three destination-posts.
+Posts are not capped on any plan.
+They are counted in **destination-posts**, one post delivered to one account, so a post sent to X, LinkedIn and Bluesky is three destination-posts.
+`destination_posts` reports them with a `null` limit, and deliveries whose text contains a link are counted as well (`link_posts`).
 
-`destination_posts` is capped per calendar month (UTC).
-Deliveries whose text contains a link are counted as well (`link_posts`).
-X posts with a link (`x_link_posts`) also have a monthly cap, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale.
-At the cap, only X posts with a link are refused (`402 quota_exceeded`, `details.resource` = `x_link_posts`); plain X posts and every other platform carry on.
-Each tweet of an X thread counts as its own destination-post, and as an X link post if it has a link.
+X is the one platform with a monthly cap, because X bills Postatron for every post and every other platform is free to post to.
+`x_posts` counts posts to X per calendar month (UTC): 300 on Starter, 1,500 on Growth and 4,000 on Scale.
+X posts with a link (`x_link_posts`) have a smaller cap inside that, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale.
+Each tweet of an X thread counts as its own X post, and as an X link post if it has a link.
 Links are detected in the post text: `http(s)://` URLs, `www.` hosts and bare domains with a common TLD.
 
-Quota is consumed when the post is created, whether it publishes immediately or later.
-Cancelling a scheduled post does not refund it, and retrying a failed one (`POST /v1/posts/{id}/retry`) does not charge it again.
+At the X post cap, a post that goes to X is refused (`402 quota_exceeded`, `details.resource` = `x_posts`), and posts to every other platform carry on.
+At the X link cap, only X posts with a link are refused (`details.resource` = `x_link_posts`); plain X posts and every other platform carry on.
+A refused request publishes nothing, so take the X accounts off a post, or the link off its X text, to send the rest.
+
+Posts are counted when they are created, whether they publish immediately or later.
+Cancelling a scheduled post does not refund it, and retrying a failed one (`POST /v1/posts/{id}/retry`) does not count it again.
 The dashboard and the API share the same counters, and `GET /v1/usage` reports them.
 
-Every plan has a fixed price, so the caps are hard stops on monthly and yearly plans alike; nothing is ever billed on top.
-When a request would go past a cap the API returns `402 quota_exceeded` and nothing is published:
+Every plan has a fixed price, so the X caps are hard stops on monthly and yearly plans alike; nothing is ever billed on top:
 
 ```json
 {
   "error": {
     "code": "quota_exceeded",
-    "message": "destination-post limit reached: 300 of 300 used this month, 2 requested; resets 2026-10-01T00:00:00Z. Upgrade your plan or wait for the next period.",
+    "message": "You have reached your monthly X post limit of 300. Posts to every other platform still go out, so take X off this post to send it now. The limit resets on 1 October, or upgrade for more.",
     "details": {
-      "resource": "destination_posts",
+      "resource": "x_posts",
       "used": 300,
       "limit": 300,
       "requested": 2,
@@ -117,6 +120,9 @@ When a request would go past a cap the API returns `402 quota_exceeded` and noth
   }
 }
 ```
+
+Unlimited is meant for people and agents posting their own content.
+Automated spam, or using Postatron to break a platform's rules, can get an account suspended (see the [terms](https://postatron.com/terms)).
 
 ## Rate limits
 
@@ -153,7 +159,7 @@ Non-2xx responses share one envelope:
 | --- | --- | --- |
 | 400 | `validation_error` | A `media_urls` entry could not be fetched, is not public, is too large or is not an image or video |
 | 401 | `unauthorized` | Missing, malformed, unknown or revoked key |
-| 402 | `quota_exceeded` | Destination-post ceiling reached |
+| 402 | `quota_exceeded` | A plan cap reached: X posts or X posts with a link this month (`details.resource` `x_posts` or `x_link_posts`), connected accounts or queues |
 | 403 | `insufficient_scope` | Key lacks the scope |
 | 403 | `subscription_required` | No active plan; `details.plans_url` is where to choose one |
 | 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team, or one asking for something only the owner may do, such as managing webhooks |
@@ -253,7 +259,7 @@ Each needs an account on its platform among the post's accounts.
 | Platform | Field | Meaning |
 | --- | --- | --- |
 | X | `content` | Text for X only, in place of `content` |
-| X | `thread` | Replies under the first tweet, each `{content, media_urls, media_ids}`; each tweet counts as a destination-post |
+| X | `thread` | Replies under the first tweet, each `{content, media_urls, media_ids}`; each tweet counts as an X post |
 | X | `community` | A Community id or link to post into; not with a thread |
 | X | `share_with_followers` | Also show a Community post to followers |
 | X | `reply_settings` | `following`, `mentioned_users`, `subscribers` or `verified`; left out, everyone can reply |
@@ -385,7 +391,7 @@ An account it already published to is never posted to twice.
 
 The body is optional: without `account_ids`, every account that failed goes again.
 The response is the post, now `processing`, with the retried deliveries `pending` (`202 Accepted`); poll `GET /v1/posts/{id}` for the outcome, which also appears in `GET /v1/events`.
-A retry is not counted against the monthly quota again: the destination-post was counted when the post was made.
+A retry is not counted again, so it uses none of the X caps: the post was counted when it was made.
 
 Refusals:
 
@@ -464,7 +470,7 @@ Every field is optional; what is left out keeps its value.
 ```
 
 `add_platforms` picks the account on each platform the way `platforms` does on create, narrowed by `profile`.
-Accounts added count against the monthly quota like a new post, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
+Accounts added are counted like a new post, so an X account added counts against the X post cap, and a new text with a link counts the X accounts already on it as X link posts; nothing is refunded when accounts are removed or the text changes.
 The result is checked as a whole: Instagram, TikTok and Pinterest still need the post to have an image or a video, every Pinterest account needs a board (its default board, if it has one, when none is named), and at least one account must remain.
 Unless the post stays a draft, an account that cannot post until it is connected again is refused with `422 reconnect_required`.
 `x`, `instagram`, `tiktok`, `youtube` and `pinterest` replace that platform's options as a whole (see `POST /v1/posts`); `{}` clears them.
@@ -472,7 +478,7 @@ A Pinterest account added without `pinterest` goes to its default board; one wit
 Only `draft` and `scheduled` posts change: once a post has started publishing the API returns `409 conflict`.
 A draft stays a draft until `scheduled_at` schedules it or `publish_now` publishes it; it needs at least one account by then.
 `publish_now: true` publishes straight away after the other changes, for a draft or a scheduled post, and cannot be combined with `scheduled_at`; the post comes back `processing`.
-A draft was counted against the quota when it was saved, so scheduling or publishing it costs nothing more unless the same request adds accounts.
+A draft was counted when it was saved, so scheduling or publishing it counts nothing more unless the same request adds accounts.
 Returns the updated post.
 
 ### POST /v1/accounts/connect
@@ -604,7 +610,8 @@ Deletes the queue; posts it already placed stay scheduled.
 {
   "period": { "start": "2026-09-01T00:00:00Z", "end": "2026-10-01T00:00:00Z" },
   "plan": { "code": "GROWTH", "name": "Growth", "interval": "month", "status": "ACTIVE", "connected_accounts": 6, "max_connected_accounts": 15 },
-  "destination_posts": { "used": 412, "limit": 1500, "remaining": 1088 },
+  "destination_posts": { "used": 412, "limit": null, "remaining": null },
+  "x_posts": { "used": 128, "limit": 1500, "remaining": 1372 },
   "link_posts": { "used": 96 },
   "x_link_posts": { "used": 11, "limit": 80, "remaining": 69 },
   "by_platform": { "x": 128, "linkedin": 104, "bluesky": 71, "threads": 58, "facebook": 51 },
@@ -613,6 +620,7 @@ Deletes the queue; posts it already placed stay scheduled.
 ```
 
 `limit` is what the plan includes each month, and the hard stop: the counters reset on the 1st (UTC).
+`limit` and `remaining` are `null` for a counter the plan does not cap, which `destination_posts` always is: posts are unlimited, and only `x_posts` and `x_link_posts` have caps.
 `rate_limits.writes_per_hour` is kept for older clients; use `writes_per_minute`.
 
 ### GET /v1/analytics
@@ -917,10 +925,10 @@ Webhooks belong to the account's owner, because they carry every post in it, acr
 
 ## Plans
 
-| Plan | Price | Destination-posts / month | Accounts | Profiles |
-| --- | --- | --- | --- | --- |
-| Starter | $15/mo or $150/yr | 300 | 5 | 2 |
-| Growth | $39/mo or $390/yr | 1,500 | 15 | 5 |
-| Scale | $99/mo or $990/yr | 4,000 | 50 | 20 |
+| Plan | Price | Posts | X posts / month | X posts with a link / month | Accounts | Profiles |
+| --- | --- | --- | --- | --- | --- | --- |
+| Starter | $15/mo or $150/yr | Unlimited | 300 | 30 | 5 | 2 |
+| Growth | $39/mo or $390/yr | Unlimited | 1,500 | 80 | 15 | 5 |
+| Scale | $99/mo or $990/yr | Unlimited | 4,000 | 200 | 50 | 20 |
 
 Prices are fixed: nothing is billed beyond the plan, monthly or yearly.

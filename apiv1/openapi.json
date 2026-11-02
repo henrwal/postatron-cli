@@ -4,7 +4,7 @@
     "title": "Postatron API",
     "version": "v1",
     "summary": "Schedule, publish and measure posts on every major social platform from one request.",
-    "description": "Postatron schedules and publishes one post to every social account it is given: X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok, YouTube and Pinterest.\nThis is its public REST API, version 1, as the API serves it.\nThe remote MCP server (`https://api.postatron.com/mcp`) and the CLI (`github.com/henrwal/postatron-cli`) are built on these routes and behave the same way.\n\n## Authentication\n\nCreate an API key in the dashboard under API & MCP (https://postatron.com/dashboard/api).\nKeys start `ptn_`, are shown once, and carry the scopes chosen when the key is made: `posts:read`, `posts:write`, `accounts:read` and `usage:read`.\nSend the key as `Authorization: Bearer ptn_...`, or as `X-API-Key: ptn_...`.\nEach operation's security requirement names the scope it needs, and a key without it gets `403 insufficient_scope`.\n\nOAuth access tokens (`pto_...`), which MCP clients obtain for themselves through OAuth 2.1, work only on the MCP endpoint: sent to these routes they get `401 unauthorized`.\n\nEvery operation except `GET /v1/openapi.json` needs an active paid plan, reads included; without one the answer is `403 subscription_required`, with `details.plans_url` saying where to choose one.\n\nA key made in a team workspace works in the owner's account, sees only the profiles its holder was granted, and is held to the owner's plan.\nMembership is checked on every request, so once its holder leaves the team, or the owner's plan stops including teams, it gets `403 workspace_forbidden`.\n\n## Profiles\n\nA profile groups connected accounts, usually one per brand or client, and holds at most one account per platform.\nWherever a route takes a `profile`, it accepts the profile's `id` or its name, ignoring case; an unknown one is `422 validation_error` with `details.profiles` listing those that exist.\n\n## Quota\n\nUsage is metered in destination-posts: one post delivered to one account, so a post to X, LinkedIn and Bluesky is three.\nThey are counted when the post is made, capped per calendar month (UTC), and reported by `GET /v1/usage`.\nX posts with a link also have their own monthly cap.\nEvery cap is a hard stop: a request past one gets `402 quota_exceeded` and nothing is published or billed.\n\n## Rate limits\n\nEach key is limited per minute, in fixed one-minute windows: writes (`POST`, `PATCH` and `DELETE`), reads (`GET`) and upload slots (`POST /v1/media/uploads`) are counted separately, and each operation names its class in `x-postatron-rate-limit`.\nEvery plan allows 30 writes, 60 reads and 120 upload slots a minute today; `GET /v1/usage` reports the limits in force, so read them from there.\nA response that got as far as the rate limiter carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` for its class.\nOver the limit the answer is `429 rate_limited`, with `Retry-After` in seconds.\n\n## Errors\n\nEvery non-2xx answer is the same envelope, `{\"error\": {\"code\": \"...\", \"message\": \"...\", \"details\": {...}}}`.\n`code` is stable and meant for programs, `message` is a sentence for a person, and `details`, when present, names the fields and values involved.\n\n## Idempotency\n\n`POST /v1/posts` takes an `Idempotency-Key` header, so a request whose answer was lost can be sent again without making a second post.\n\n## Webhooks\n\nA webhook POSTs the account's events, signed, to a URL its owner registers: see the `webhooks` section of this document for each event's body and headers, and the Webhooks routes for managing them.\n",
+    "description": "Postatron schedules and publishes one post to every social account it is given: X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok, YouTube and Pinterest.\nThis is its public REST API, version 1, as the API serves it.\nThe remote MCP server (`https://api.postatron.com/mcp`) and the CLI (`github.com/henrwal/postatron-cli`) are built on these routes and behave the same way.\n\n## Authentication\n\nCreate an API key in the dashboard under API & MCP (https://postatron.com/dashboard/api).\nKeys start `ptn_`, are shown once, and carry the scopes chosen when the key is made: `posts:read`, `posts:write`, `accounts:read` and `usage:read`.\nSend the key as `Authorization: Bearer ptn_...`, or as `X-API-Key: ptn_...`.\nEach operation's security requirement names the scope it needs, and a key without it gets `403 insufficient_scope`.\n\nOAuth access tokens (`pto_...`), which MCP clients obtain for themselves through OAuth 2.1, work only on the MCP endpoint: sent to these routes they get `401 unauthorized`.\n\nEvery operation except `GET /v1/openapi.json` needs an active paid plan, reads included; without one the answer is `403 subscription_required`, with `details.plans_url` saying where to choose one.\n\nA key made in a team workspace works in the owner's account, sees only the profiles its holder was granted, and is held to the owner's plan.\nMembership is checked on every request, so once its holder leaves the team, or the owner's plan stops including teams, it gets `403 workspace_forbidden`.\n\n## Profiles\n\nA profile groups connected accounts, usually one per brand or client, and holds at most one account per platform.\nWherever a route takes a `profile`, it accepts the profile's `id` or its name, ignoring case; an unknown one is `422 validation_error` with `details.profiles` listing those that exist.\n\n## Quota\n\nPosts are not capped.\nThey are counted in destination-posts, one post delivered to one account, so a post to X, LinkedIn and Bluesky is three, and reported by `GET /v1/usage`.\nX is the exception, because X bills every post: each plan caps posts to X per calendar month (UTC), each tweet of a thread counting as one, and has a smaller monthly cap on X posts with a link.\nThey are counted when the post is made.\nAn X cap is a hard stop: a request past one gets `402 quota_exceeded` and nothing is published or billed, while posts to every other platform carry on.\n\n## Rate limits\n\nEach key is limited per minute, in fixed one-minute windows: writes (`POST`, `PATCH` and `DELETE`), reads (`GET`) and upload slots (`POST /v1/media/uploads`) are counted separately, and each operation names its class in `x-postatron-rate-limit`.\nEvery plan allows 30 writes, 60 reads and 120 upload slots a minute today; `GET /v1/usage` reports the limits in force, so read them from there.\nA response that got as far as the rate limiter carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` for its class.\nOver the limit the answer is `429 rate_limited`, with `Retry-After` in seconds.\n\n## Errors\n\nEvery non-2xx answer is the same envelope, `{\"error\": {\"code\": \"...\", \"message\": \"...\", \"details\": {...}}}`.\n`code` is stable and meant for programs, `message` is a sentence for a person, and `details`, when present, names the fields and values involved.\n\n## Idempotency\n\n`POST /v1/posts` takes an `Idempotency-Key` header, so a request whose answer was lost can be sent again without making a second post.\n\n## Webhooks\n\nA webhook POSTs the account's events, signed, to a URL its owner registers: see the `webhooks` section of this document for each event's body and headers, and the Webhooks routes for managing them.\n",
     "termsOfService": "https://postatron.com/terms",
     "contact": {
       "name": "Postatron support",
@@ -77,7 +77,7 @@
       "post": {
         "operationId": "createPost",
         "summary": "Create a post",
-        "description": "Creates a post on one or more connected accounts: now, at `scheduled_at`, or in a queue's next free slot (`queue`).\n\nChoose the accounts with `account_ids` or `platforms` (narrowed by `profile`). Platform options (`x`, `instagram`, `tiktok`, `youtube`, `pinterest`) are the dashboard composer's settings, checked by the same rules, and each needs an account on its platform among the post's accounts.\n\nMedia: up to four items across `media_urls` and `media_ids`, never images and video together. Instagram and TikTok need an image or a video, YouTube a video, Pinterest an image (two to four for a carousel) or one video.\n\nThe post is checked as a whole before anything is stored or counted, and refused with `422` when it breaks a rule: text over a platform's limit, media a platform cannot take, `scheduled_at` less than 5 minutes ahead, an account that needs reconnecting (`reconnect_required`), an unknown Pinterest board, TikTok settings the creator's account does not allow.\n\nEach account is one destination-post against the monthly quota, counted when the post is made, whether it goes now or later; each tweet of an X thread counts as one. Send an `Idempotency-Key` to make the request safe to repeat.",
+        "description": "Creates a post on one or more connected accounts: now, at `scheduled_at`, or in a queue's next free slot (`queue`).\n\nChoose the accounts with `account_ids` or `platforms` (narrowed by `profile`). Platform options (`x`, `instagram`, `tiktok`, `youtube`, `pinterest`) are the dashboard composer's settings, checked by the same rules, and each needs an account on its platform among the post's accounts.\n\nMedia: up to four items across `media_urls` and `media_ids`, never images and video together. Instagram and TikTok need an image or a video, YouTube a video, Pinterest an image (two to four for a carousel) or one video.\n\nThe post is checked as a whole before anything is stored or counted, and refused with `422` when it breaks a rule: text over a platform's limit, media a platform cannot take, `scheduled_at` less than 5 minutes ahead, an account that needs reconnecting (`reconnect_required`), an unknown Pinterest board, TikTok settings the creator's account does not allow.\n\nPosts are not capped, except on X: each X account is one X post against the plan's monthly cap (each tweet of a thread counts as one), and one whose text has a link is also an X link post. They are counted when the post is made, whether it goes now or later. Send an `Idempotency-Key` to make the request safe to repeat.",
         "tags": [
           "Posts"
         ],
@@ -487,7 +487,7 @@
       "patch": {
         "operationId": "updatePost",
         "summary": "Change a post",
-        "description": "Changes a draft or a scheduled post: its text, its time, its accounts or its platform options, or schedules or publishes a draft. Adding a platform to a post already scheduled (\"put it on Instagram too\") is this, not a second post.\n\nThe post is checked as a whole, as a new one would be. Only `draft` and `scheduled` posts change; once one has started publishing the answer is `409 conflict`. A draft stays a draft until `scheduled_at` schedules it or `publish_now` sends it, and needs an account by then. `publish_now` also brings a scheduled post forward. Unless the post stays a draft, an account that cannot post until it is connected again is refused with `422 reconnect_required`.\n\nWhatever the change newly reaches is counted against the quota: an added account, or new text with a link on a post to X. Nothing is refunded when accounts are removed. A draft was counted when it was saved, so sending it costs nothing more unless the same request adds accounts.",
+        "description": "Changes a draft or a scheduled post: its text, its time, its accounts or its platform options, or schedules or publishes a draft. Adding a platform to a post already scheduled (\"put it on Instagram too\") is this, not a second post.\n\nThe post is checked as a whole, as a new one would be. Only `draft` and `scheduled` posts change; once one has started publishing the answer is `409 conflict`. A draft stays a draft until `scheduled_at` schedules it or `publish_now` sends it, and needs an account by then. `publish_now` also brings a scheduled post forward. Unless the post stays a draft, an account that cannot post until it is connected again is refused with `422 reconnect_required`.\n\nWhatever the change newly reaches is counted as a new post would be: an added account, or new text with a link on a post to X; only what reaches X counts against a cap. Nothing is refunded when accounts are removed. A draft was counted when it was saved, so sending it counts nothing more unless the same request adds accounts.",
         "tags": [
           "Posts"
         ],
@@ -758,7 +758,7 @@
       "post": {
         "operationId": "retryPost",
         "summary": "Retry a failed post",
-        "description": "Sends a `failed` or `partial` post again, to the accounts it failed on only: every one, or those `account_ids` names. An account it already published to is never posted to twice. It is not counted against the quota again. Poll `GET /v1/posts/{post_id}` for the outcome, which also appears in `GET /v1/events`.\n\nRefused with `409 conflict` when the post is not `failed` or `partial`, nothing on it failed, or a named account did not fail (`details.reason`); with `422 validation_error` when a named account is not on the post; and with `422 reconnect_required` when an account to retry cannot post until it is connected again, or is no longer connected, in which case nothing is sent.",
+        "description": "Sends a `failed` or `partial` post again, to the accounts it failed on only: every one, or those `account_ids` names. An account it already published to is never posted to twice. It is not counted again, so it uses none of the X caps. Poll `GET /v1/posts/{post_id}` for the outcome, which also appears in `GET /v1/events`.\n\nRefused with `409 conflict` when the post is not `failed` or `partial`, nothing on it failed, or a named account did not fail (`details.reason`); with `422 validation_error` when a named account is not on the post; and with `422 reconnect_required` when an account to retry cannot post until it is connected again, or is no longer connected, in which case nothing is sent.",
         "tags": [
           "Posts"
         ],
@@ -1603,8 +1603,8 @@
     "/v1/usage": {
       "get": {
         "operationId": "getUsage",
-        "summary": "Read usage and quota",
-        "description": "This month's quota (UTC calendar month) and what has been used, posts per platform, and the rate limits in force for the key. Read limits from here rather than hardcoding them. Usage is metered in destination-posts: one post delivered to one account. X posts with a link have their own monthly cap (`x_link_posts`). Every cap is a hard stop; nothing is billed beyond the plan.",
+        "summary": "Read usage and caps",
+        "description": "This month's usage (UTC calendar month): posts per platform, how much of the plan's X caps is used, and the rate limits in force for the key. Read limits from here rather than hardcoding them. Posts are counted in destination-posts, one post delivered to one account, and are not capped, so `destination_posts` has a `null` limit. Posts to X are capped each month (`x_posts`, each tweet of a thread counting as one), and X posts with a link have a smaller cap of their own (`x_link_posts`). Every cap is a hard stop; nothing is billed beyond the plan.",
         "tags": [
           "Usage"
         ],
@@ -1655,8 +1655,13 @@
                   },
                   "destination_posts": {
                     "used": 412,
+                    "limit": null,
+                    "remaining": null
+                  },
+                  "x_posts": {
+                    "used": 128,
                     "limit": 1500,
-                    "remaining": 1088
+                    "remaining": 1372
                   },
                   "link_posts": {
                     "used": 96
@@ -3133,7 +3138,7 @@
         }
       },
       "PaymentRequired": {
-        "description": "`quota_exceeded`: the request would go past one of the plan's hard caps, and nothing was done. `details.resource` names it: `destination_posts` or `x_link_posts` (monthly, with `used`, `limit`, `requested` and `resets_at`), `connected_accounts`, or `queues` (with `limit`).",
+        "description": "`quota_exceeded`: the request would go past one of the plan's hard caps, and nothing was done. `details.resource` names it: `x_posts` or `x_link_posts` (monthly, with `used`, `limit`, `requested` and `resets_at`), `connected_accounts`, or `queues` (with `limit`).",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
@@ -3151,13 +3156,13 @@
               "$ref": "#/components/schemas/ErrorBody"
             },
             "examples": {
-              "destination_posts": {
+              "x_posts": {
                 "value": {
                   "error": {
                     "code": "quota_exceeded",
-                    "message": "destination-post limit reached: 300 of 300 used this month, 2 requested; resets 2026-10-01T00:00:00Z. Upgrade your plan or wait for the next period.",
+                    "message": "You have reached your monthly X post limit of 300. Posts to every other platform still go out, so take X off this post to send it now. The limit resets on 1 October, or upgrade for more.",
                     "details": {
-                      "resource": "destination_posts",
+                      "resource": "x_posts",
                       "used": 300,
                       "limit": 300,
                       "requested": 2,
@@ -3576,7 +3581,7 @@
             "items": {
               "$ref": "#/components/schemas/XThreadTweet"
             },
-            "description": "Replies under the first tweet, in order: `thread[0]` is the second tweet. Each tweet counts as its own destination-post, and as an X link post if it has a link. A thread cannot go into a Community."
+            "description": "Replies under the first tweet, in order: `thread[0]` is the second tweet. Each tweet counts as its own X post against the monthly cap, and as an X link post if it has a link. A thread cannot go into a Community."
           },
           "community": {
             "type": "string",
@@ -4786,7 +4791,7 @@
       },
       "UsageReport": {
         "type": "object",
-        "description": "This month's quota and what has been used. The dashboard shows the same counters.",
+        "description": "This month's usage and the plan's caps. The dashboard shows the same counters.",
         "properties": {
           "period": {
             "$ref": "#/components/schemas/UsagePeriod"
@@ -4796,14 +4801,18 @@
           },
           "destination_posts": {
             "$ref": "#/components/schemas/UsageCounter",
-            "description": "Destination-posts this month: one post delivered to one account."
+            "description": "Destination-posts this month: one post delivered to one account. Posts are not capped, so `limit` and `remaining` are null."
+          },
+          "x_posts": {
+            "$ref": "#/components/schemas/UsageCounter",
+            "description": "Posts to X this month, each tweet of a thread counting as one, against the plan's monthly X post cap."
           },
           "link_posts": {
             "$ref": "#/components/schemas/UsageLinkCounter"
           },
           "x_link_posts": {
             "$ref": "#/components/schemas/UsageCounter",
-            "description": "X posts with a link this month, which have their own cap."
+            "description": "X posts with a link this month, which have a smaller cap of their own inside `x_posts`."
           },
           "by_platform": {
             "type": "object",
@@ -4820,6 +4829,7 @@
           "period",
           "plan",
           "destination_posts",
+          "x_posts",
           "link_posts",
           "x_link_posts",
           "by_platform",
@@ -4884,17 +4894,25 @@
       },
       "UsageCounter": {
         "type": "object",
-        "description": "A capped monthly counter.",
+        "description": "A monthly counter, with the plan's cap when it has one.",
         "properties": {
           "used": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Counted so far this month."
           },
           "limit": {
-            "type": "integer",
-            "description": "What the plan includes each month, and the hard stop: there is no overage on any plan."
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "What the plan includes each month, and the hard stop: there is no overage on any plan. Null when the plan sets no cap."
           },
           "remaining": {
-            "type": "integer"
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "What is left of `limit` this month; null when there is no cap."
           }
         },
         "required": [

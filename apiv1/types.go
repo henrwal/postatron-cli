@@ -666,13 +666,20 @@ type DeleteQueueResponse struct {
 // UsageReport is the response of GET /v1/usage. The dashboard renders the
 // same structure.
 type UsageReport struct {
-	Period           UsagePeriod      `json:"period"`
-	Plan             UsagePlan        `json:"plan"`
-	DestinationPosts UsageCounter     `json:"destination_posts"`
-	LinkPosts        UsageLinkCounter `json:"link_posts"`
-	XLinkPosts       UsageCounter     `json:"x_link_posts"`
-	ByPlatform       map[string]int   `json:"by_platform"`
-	RateLimits       UsageRateLimits  `json:"rate_limits"`
+	Period UsagePeriod `json:"period"`
+	Plan   UsagePlan   `json:"plan"`
+	// DestinationPosts counts every post delivered to one account. Posts are
+	// not capped on any plan, so its Limit and Remaining are null.
+	DestinationPosts UsageCounter `json:"destination_posts"`
+	// XPosts counts posts to X, each tweet of a thread as one: the one
+	// platform with a monthly cap, because X bills every post.
+	XPosts    UsageCounter     `json:"x_posts"`
+	LinkPosts UsageLinkCounter `json:"link_posts"`
+	// XLinkPosts counts the X posts with a link, which X bills far more for
+	// and which have a smaller cap of their own inside XPosts.
+	XLinkPosts UsageCounter    `json:"x_link_posts"`
+	ByPlatform map[string]int  `json:"by_platform"`
+	RateLimits UsageRateLimits `json:"rate_limits"`
 }
 
 // UsagePeriod is the calendar month the counters belong to.
@@ -691,12 +698,29 @@ type UsagePlan struct {
 	MaxConnectedAccounts int    `json:"max_connected_accounts"`
 }
 
-// UsageCounter is a capped counter. Limit is what the plan includes each
-// month and is also the hard stop: there is no overage on any plan.
+// UsageCounter is a monthly counter. Limit is what the plan includes each
+// month and is also the hard stop: there is no overage on any plan. Limit
+// and Remaining are null when the plan sets no cap on what it counts.
 type UsageCounter struct {
-	Used      int `json:"used"`
-	Limit     int `json:"limit"`
-	Remaining int `json:"remaining"`
+	Used      int  `json:"used"`
+	Limit     *int `json:"limit"`
+	Remaining *int `json:"remaining"`
+}
+
+// CappedCounter is a counter at used of a monthly cap of limit.
+func CappedCounter(used, limit int) UsageCounter {
+	remaining := max(limit-used, 0)
+	return UsageCounter{Used: used, Limit: &limit, Remaining: &remaining}
+}
+
+// UncappedCounter is a counter the plan sets no cap on.
+func UncappedCounter(used int) UsageCounter {
+	return UsageCounter{Used: used}
+}
+
+// Capped reports whether the plan caps what the counter counts.
+func (c UsageCounter) Capped() bool {
+	return c.Limit != nil
 }
 
 // UsageLinkCounter counts link-containing destination-posts across all platforms.

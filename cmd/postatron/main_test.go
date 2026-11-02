@@ -132,15 +132,14 @@ func (f *fakeOps) GetUsage(_ context.Context) (*apiv1.UsageReport, error) {
 	return &apiv1.UsageReport{
 		Period:           apiv1.UsagePeriod{Start: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), End: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
 		Plan:             apiv1.UsagePlan{Code: "STARTER", Name: "Starter", Interval: "month", Status: "ACTIVE", ConnectedAccounts: 2, MaxConnectedAccounts: 5},
-		DestinationPosts: apiv1.UsageCounter{Used: 12, Limit: 300, Remaining: 288},
-		XLinkPosts:       apiv1.UsageCounter{Used: 1, Limit: 10, Remaining: 9},
+		DestinationPosts: apiv1.UncappedCounter(12),
+		XPosts:           apiv1.CappedCounter(7, 300),
+		XLinkPosts:       apiv1.CappedCounter(1, 10),
 		ByPlatform:       map[string]int{"x": 7, "linkedin": 5},
 		RateLimits:       apiv1.UsageRateLimits{WritesPerMinute: 30, ReadsPerMinute: 60, UploadsPerMinute: 120, WritesPerHour: 1800},
 	}, nil
 }
 
-// uncappedUsage reports X link posts the way the API does since they stopped
-// being capped: a count with no limit.
 func (f *fakeOps) DeletePosts(_ context.Context, req apiv1.DeletePostsRequest) (*apiv1.DeletePostsResponse, error) {
 	f.bulkDeleted = append(f.bulkDeleted, req.IDs...)
 	return &apiv1.DeletePostsResponse{Deleted: req.IDs, Failed: []apiv1.DeletePostsError{}}, nil
@@ -161,6 +160,8 @@ func (f *fakeOps) DeleteQueue(_ context.Context, id string) (*apiv1.DeleteQueueR
 	return &apiv1.DeleteQueueResponse{ID: id, Deleted: true, Message: "Posts it had placed stay scheduled."}, nil
 }
 
+// uncappedUsage reports X link posts as a count with no limit, the way the
+// API reports any counter a plan does not cap.
 type uncappedUsage struct{ *fakeOps }
 
 func (u *uncappedUsage) GetUsage(ctx context.Context) (*apiv1.UsageReport, error) {
@@ -168,7 +169,7 @@ func (u *uncappedUsage) GetUsage(ctx context.Context) (*apiv1.UsageReport, error
 	if err != nil {
 		return nil, err
 	}
-	report.XLinkPosts = apiv1.UsageCounter{Used: 1}
+	report.XLinkPosts = apiv1.UncappedCounter(1)
 	return report, nil
 }
 
@@ -391,7 +392,10 @@ func TestJSONOutput(t *testing.T) {
 	require.NoError(t, err)
 	var report apiv1.UsageReport
 	require.NoError(t, json.Unmarshal([]byte(out), &report))
-	assert.Equal(t, 288, report.DestinationPosts.Remaining)
+	assert.Nil(t, report.DestinationPosts.Limit, "posts are not capped")
+	require.NotNil(t, report.XPosts.Remaining)
+	assert.Equal(t, 293, *report.XPosts.Remaining)
+	assert.Contains(t, out, `"limit": null`, "no cap is written as null")
 }
 
 func TestHumanOutput(t *testing.T) {
@@ -434,7 +438,8 @@ func TestHumanOutput(t *testing.T) {
 
 	out, err = run(t, ops, "get-usage")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Destination-posts: 12 / 300 (288 remaining)")
+	assert.Contains(t, out, "Destination-posts: 12 (no cap)")
+	assert.Contains(t, out, "X posts:           7 / 300 (293 remaining)")
 	assert.Contains(t, out, "30 writes, 60 reads, 120 uploads per minute")
 	assert.Contains(t, out, "X link posts:      1 / 10 (9 remaining)", "a capped counter keeps its limit")
 

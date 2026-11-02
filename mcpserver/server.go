@@ -52,7 +52,7 @@ const (
 	descListQueues = "List posting queues: weekly time slots per profile, each with its next free slot (next_slot). " +
 		"Pass a queue's name to create_post as queue to schedule a post into that slot instead of choosing a time."
 	descCreatePost = "Publish a post now, schedule it, or add it to a queue. Omit scheduled_at and queue to publish immediately. " +
-		"Instagram and TikTok need an image or a video, YouTube a video, and Pinterest an image or a video and a board. A post to N accounts uses N destination-posts of the monthly quota. " +
+		"Instagram and TikTok need an image or a video, YouTube a video, and Pinterest an image or a video and a board. Posts are not capped, except on X: each tweet counts against the plan's monthly X post cap, and one with a link against its smaller X link cap. " +
 		"An account that needs reconnecting is refused with reconnect_required; give the person connect_account's link for it."
 	descListPosts = "List posts, most recent first, filtered by status, platform, profile or date. A draft with unpublished.reason no_plan came due while the account " +
 		"had no plan and went back to the drafts; once there is a plan, schedule or publish it with update_post."
@@ -68,11 +68,11 @@ const (
 		"it stays live on the platforms and the person has to delete it there, so tell them. A post publishing now, or due within two minutes, cannot be deleted."
 	descUpdatePost = "Change a draft or scheduled post: its text, its time, or the accounts it goes to. Use add_platforms (e.g. [\"instagram\"]) when the person wants a post they already have on another platform too, " +
 		"rather than a second create_post, so it stays one post. A draft (list_posts with status draft) goes out with scheduled_at or publish_now; otherwise it stays a draft. " +
-		"publish_now posts to the person's real accounts at once, so confirm first. Accounts added count against the monthly quota like a new post. Instagram, TikTok and Pinterest need the post to have an image or a video, and Pinterest a board."
+		"publish_now posts to the person's real accounts at once, so confirm first. X accounts added, or a link added to a post to X, count against the monthly X caps like a new post. Instagram, TikTok and Pinterest need the post to have an image or a video, and Pinterest a board."
 	descRetryPost = "Send a failed or partial post again to the accounts it failed on. An account it already published to is never posted to twice. " +
 		"Check each failed delivery's error_code (get_post) first: reconnect needs connect_account with that account_id before a retry, rate_limited may need a wait, " +
 		"and media_rejected or validation will fail the same way, since a retry sends the same post. It posts to the person's real accounts, so confirm first. " +
-		"Retries are not charged against the monthly quota again."
+		"Retries do not count against the monthly X caps again."
 	descConnectAccount = "Get a link that connects one of the person's social accounts to Postatron, or signs one in again whose access has gone. Give them the connect_url: " +
 		"it opens Postatron and starts that platform's sign-in. Nothing changes until they finish there, so wait for them to say it is done, then call list_accounts. " +
 		"Use it when they ask to post somewhere that is not connected yet, and with account_id when an account says reconnect_required or a delivery failed with error_code reconnect."
@@ -85,7 +85,7 @@ const (
 		"reach, followers, totals per platform, the best posts, and any account that needs reconnecting. " +
 		"Metrics a platform does not report come back as null. X and Pinterest are not included. YouTube's numbers are in the per-platform totals as YouTube reports them, " +
 		"but YouTube's policies keep them out of engagement totals, rates and top_posts. Each account is read at most once an hour (last_sync_at, next_sync_at)."
-	descGetUsage = "How much of the current billing period's post quota has been used, and what the plan allows."
+	descGetUsage = "This month's usage: posts per platform, which are not capped, and how much of the plan's monthly X post and X link post caps is used (x_posts, x_link_posts), with the account allowance and rate limits."
 )
 
 // CreatePostInput is the create_post tool input.

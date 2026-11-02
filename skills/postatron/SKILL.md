@@ -92,7 +92,7 @@ When one text is too long for one platform, say which and offer a shorter versio
 `create_post` and `update_post` take `x`, `instagram`, `tiktok`, `youtube` and `pinterest` objects for what only that platform has.
 Use them when the person asks; never add one they did not ask for.
 
-- **X thread**: "make it a thread" means `x.thread`, a list of `{content}` for the tweets after the first, each within 280 characters. Each tweet counts against the quota as its own post, so say how many. A thread cannot go into a Community.
+- **X thread**: "make it a thread" means `x.thread`, a list of `{content}` for the tweets after the first, each within 280 characters. Each tweet counts against the plan's monthly X post cap as its own post, so say how many. A thread cannot go into a Community.
 - **X poll**: `x.poll` with 2 to 4 `options` of up to 25 characters and `duration_minutes` (default a day). A poll cannot have media.
 - **Who can reply on X**: `x.reply_settings` is `following`, `mentioned_users`, `subscribers` or `verified`.
 - **Different wording per platform**: `x.content` replaces the text on X, `instagram.caption` on Instagram. Use these rather than separate posts.
@@ -129,7 +129,7 @@ New `slots` or `timezone` leave the posts already in the queue at their times; p
 | Connect a social account | `connect_account` | `connect-account <platform>` |
 | Sign an account in again | `connect_account` with `account_id` | `connect-account --account-id <id>` |
 | How posts are doing | `get_analytics` (`range` 7d, 30d, 90d or 365d; optional `profile`, `platform`) | `get-analytics` |
-| Quota left this month | `get_usage` | `get-usage` |
+| X posts left this month (other posts are unlimited) | `get_usage` | `get-usage` |
 
 - A post's `deliveries` hold one entry per account: `published` with a `url`, or `failed` with an `error` and an `error_code`. Report failures account by account; a post can be `partial`. A `published` delivery with `warning: true` went out, and its `error` is about something after it, such as a first comment; do not call it a failure.
 - A draft with `unpublished.reason` `no_plan` came due while the account had no plan and went back to the drafts. Once there is a plan, offer to schedule or publish it with `update_post`.
@@ -147,7 +147,7 @@ Read each failed delivery's `error_code`, then:
 | `media_rejected`, `validation` | A retry sends the same post and fails the same way. Say what the `error` asks for and offer a new post with the change. |
 | `policy`, `unknown` | Read the `error` to the person; it says what would change it. |
 
-`retry_post` sends the post again only to the accounts it failed on, never to one it already reached, and is not charged against the quota again. Pass `account_ids` to retry some of them. It publishes at once, so confirm first.
+`retry_post` sends the post again only to the accounts it failed on, never to one it already reached, and is not counted against the X caps again. Pass `account_ids` to retry some of them. It publishes at once, so confirm first.
 A post or edit to an account that cannot post is refused up front with `reconnect_required`: `details.account_ids` names the accounts, and `connect_account` with each `account_id` fixes it.
 - When the person adds to a post they already scheduled ("put it on Instagram too"), use `update_post` with `add_platforms`, not a second `create_post`: it stays one post, edited and cancelled as one.
 - "Submit my draft to LinkedIn": find it with `list_posts` and `status: draft`, then `update_post` with `add_platforms: ["linkedin"]` and `publish_now: true` (or `scheduled_at` for later). If more than one draft could be the one, show them and ask. Confirm before publishing now: it goes to their real account.
@@ -161,7 +161,7 @@ A post or edit to an account that cannot post is refused up front with `reconnec
 | Code | What to do |
 | --- | --- |
 | `validation_error` | Read the message; it names the field. Fix it and retry, or ask. A message listing profiles means pick one, or ask. |
-| `quota_exceeded` | Stop and tell the person: they are at their plan's monthly limit. Do not retry. If `details.resource` is `x_link_posts`, only X posts with a link are capped: offer to post to X without the link, or to the other platforms. |
+| `quota_exceeded` | Stop and tell the person which of their plan's limits it is. Do not retry. Posts are unlimited except on X: if `details.resource` is `x_posts`, this month's X posts are used up, so offer to post to the other platforms without X; if it is `x_link_posts`, only X posts with a link are capped, so offer to post to X without the link, or to the other platforms. |
 | `rate_limited` | Wait for the seconds in `retry_after` (or the `Retry-After` header), then retry once. |
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
 | `subscription_required` | The account has no active plan, so nothing can be posted or read. Tell the person and give them the plans link from the message; do not retry. |
