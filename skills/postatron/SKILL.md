@@ -128,6 +128,8 @@ New `slots` or `timezone` leave the posts already in the queue at their times; p
 | Set up or change a queue | `create_queue`, `update_queue`, `delete_queue` | `create-queue`, `update-queue`, `delete-queue` |
 | Connect a social account | `connect_account` | `connect-account <platform>` |
 | Sign an account in again | `connect_account` with `account_id` | `connect-account --account-id <id>` |
+| Make, rename or delete a profile (one per brand or client) | `create_profile`, `update_profile`, `delete_profile` | `create-profile`, `rename-profile`, `delete-profile` |
+| Let someone with no Postatron login (an app's own customer) connect an account | `create_connect_session`, then `get_connect_session` to confirm | `create-connect-session`, `get-connect-session` |
 | How posts are doing | `get_analytics` (`range` 7d, 30d, 90d or 365d; optional `profile`, `platform`) | `get-analytics` |
 | X posts left this month (other posts are unlimited) | `get_usage` | `get-usage` |
 

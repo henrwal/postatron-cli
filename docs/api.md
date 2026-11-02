@@ -17,6 +17,11 @@ The MCP server (remote at `https://api.postatron.com/mcp`, or local as `postatro
 | `GET` | `/v1/accounts` | Connected social accounts and their profiles | `accounts:read` |
 | `POST` | `/v1/accounts/connect` | A link the person opens to connect an account, or sign one in again | `accounts:read` |
 | `GET` | `/v1/profiles` | Profiles and the accounts in each | `accounts:read` |
+| `POST` | `/v1/profiles` | Create a profile, such as one per customer | `posts:write` |
+| `PATCH` | `/v1/profiles/{id}` | Rename a profile | `posts:write` |
+| `DELETE` | `/v1/profiles/{id}` | Delete a profile with no accounts in it | `posts:write` |
+| `POST` | `/v1/connect/sessions` | A hosted connect link for someone without a Postatron login | `posts:write` and `accounts:read` |
+| `GET` | `/v1/connect/sessions/{id}` | Whether an account was connected through that link | `accounts:read` |
 | `GET` | `/v1/queues` | Posting queues and the next free slot in each | `posts:read` |
 | `POST` | `/v1/queues` | Create a queue | `posts:write` |
 | `PATCH` | `/v1/queues/{id}` | Change, pause or resume a queue | `posts:write` |
@@ -79,6 +84,7 @@ Membership is checked on every request: once the member leaves or is removed, or
 A profile groups connected accounts, usually one per brand or client.
 Every user has a Default profile, and paid plans can add more (Starter 2, Growth 5, Scale 20).
 A profile holds at most one account per platform, so a second Instagram account lives in a second profile.
+Create, rename and delete them in the dashboard or with the endpoints below; an app whose customers connect their own accounts makes one per customer (see [Connect your customers' accounts](#connect-your-customers-accounts)).
 
 Wherever the API takes a `profile`, it accepts either the profile's `id` or its name, ignoring case.
 An unknown profile is a `422 validation_error` whose `details.profiles` lists the ones that exist.
@@ -548,6 +554,35 @@ A post to a `reconnect_required` account is refused; `POST /v1/accounts/connect`
 Default comes first, then the rest oldest first.
 `accounts` has the same shape as `GET /v1/accounts`.
 
+### POST /v1/profiles
+
+```json
+{ "name": "Acme Ltd" }
+```
+
+Returns `201` with the profile as `GET /v1/profiles` shows it, with no accounts yet.
+A name is up to 40 characters and unique in the account, ignoring case: one already in use is `409 conflict`, and an empty or longer one `422 validation_error`.
+Each plan has a number of profiles, Default included; past it, the answer is `402 quota_exceeded` with `details.resource` = `profiles`.
+
+### PATCH /v1/profiles/{id}
+
+`{id}` is the profile's id or its name.
+
+```json
+{ "name": "Acme Studio" }
+```
+
+Renames the profile, Default included, and answers with it and its accounts.
+Its accounts, posts and queues stay as they are.
+
+### DELETE /v1/profiles/{id}
+
+Deletes a profile with no accounts in it and answers `{ "id": "8f2c1a9e", "deleted": true }`.
+While it has any, the answer is `409 conflict` with `details.account_ids`: disconnect them, or move them to another profile in the dashboard, first.
+The Default profile cannot be deleted (`422 validation_error`).
+
+Profiles are the account owner's to manage: a team workspace key can list them but gets `403 workspace_forbidden` for creating, renaming or deleting one.
+
 ### GET /v1/queues
 
 A queue is a profile's weekly posting times, set up in the dashboard under Queues or with `POST /v1/queues`.
@@ -925,6 +960,149 @@ Answers with the webhook and its new `secret`, shown once.
 The old secret keeps signing beside the new one for 24 hours, so you can switch your server over without refusing events.
 
 Webhooks belong to the account's owner, because they carry every post in it, across every profile: a team workspace key is refused with `403 workspace_forbidden`.
+
+## Connect your customers' accounts
+
+An app built on Postatron can let its own customers connect their social accounts, with no Postatron login of their own.
+Each customer gets a profile in your account, and a connect session gives you a link to send them to.
+The link opens a page on postatron.com that says which site is asking (the host of your `redirect_url`) and that it is through Postatron.
+It runs the platform's own sign-in, puts the account in the customer's profile, and sends the customer back to your `redirect_url`.
+From then on the account is one of yours: post to it with `POST /v1/posts` and its `account_ids`, or with `platforms` and the customer's `profile`.
+
+The page is Postatron's, not white-label: it carries Postatron's name, and the platforms' screens ask the customer to allow Postatron.
+It uses Postatron's own platform apps, so Instagram, Facebook and Threads (waiting on Meta's App Review) and TikTok (waiting on TikTok's app review and Direct Post audit) work only for people with a role on those apps until the reviews pass.
+For Bluesky the page asks for the customer's handle and an app password, never their main password.
+
+### A worked example
+
+A customer of `app.example.com`, Acme Ltd, wants to connect their Instagram account.
+Your server makes them a profile once:
+
+```bash
+curl https://api.postatron.com/v1/profiles \
+  -H "Authorization: Bearer ptn_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Ltd"}'
+```
+
+```json
+{ "id": "8f2c1a9e", "name": "Acme Ltd", "is_default": false, "accounts": [] }
+```
+
+When they click Connect Instagram in your app, your server creates a session and sends their browser to its `url`:
+
+```bash
+curl https://api.postatron.com/v1/connect/sessions \
+  -H "Authorization: Bearer ptn_..." \
+  -H "Content-Type: application/json" \
+  -d '{"profile": "8f2c1a9e", "platforms": ["instagram"], "redirect_url": "https://app.example.com/integrations/social/done?customer=42"}'
+```
+
+```json
+{
+  "id": "cs_5f0c2a9e4b7d1c3e8a6f2b0d",
+  "url": "https://postatron.com/connect/ptc_Jx3m0Qf8v2Kd9LwYc1Hn5Rt7Bz4Ua6Ps0Ge2Vi8Ok1Mq",
+  "status": "pending",
+  "profile_id": "8f2c1a9e",
+  "profile_name": "Acme Ltd",
+  "platforms": ["instagram"],
+  "redirect_url": "https://app.example.com/integrations/social/done?customer=42",
+  "created_at": "2026-11-02T09:10:00Z",
+  "expires_at": "2026-11-02T10:10:00Z"
+}
+```
+
+Keep the session's `id` beside the customer, and redirect them to `url`.
+They sign in to Instagram, and Postatron sends them to:
+
+```text
+https://app.example.com/integrations/social/done?customer=42&status=connected&account_id=17841400000000000&platform=instagram&profile=8f2c1a9e&session=cs_5f0c2a9e4b7d1c3e8a6f2b0d
+```
+
+or, if they said no on Instagram's screen or went back without connecting:
+
+```text
+https://app.example.com/integrations/social/done?customer=42&status=error&error=access_denied&session=cs_5f0c2a9e4b7d1c3e8a6f2b0d
+```
+
+Anyone can type a query string, so check the session before you rely on it:
+
+```bash
+curl https://api.postatron.com/v1/connect/sessions/cs_5f0c2a9e4b7d1c3e8a6f2b0d \
+  -H "Authorization: Bearer ptn_..."
+```
+
+```json
+{
+  "id": "cs_5f0c2a9e4b7d1c3e8a6f2b0d",
+  "status": "connected",
+  "profile_id": "8f2c1a9e",
+  "profile_name": "Acme Ltd",
+  "platforms": ["instagram"],
+  "redirect_url": "https://app.example.com/integrations/social/done?customer=42",
+  "created_at": "2026-11-02T09:10:00Z",
+  "expires_at": "2026-11-02T10:10:00Z",
+  "connected_at": "2026-11-02T09:12:40Z",
+  "account": { "id": "17841400000000000", "platform": "instagram", "username": "acme.studio", "display_name": "Acme Studio", "status": "connected", "profile_id": "8f2c1a9e", "profile_name": "Acme Ltd", "connected_at": "2026-11-02T09:12:40Z" }
+}
+```
+
+A webhook subscribed to `account.connected` hears about the account as well, with the account in `data.account` and its `profile_id`, so a server that already takes webhooks need not ask.
+Later, when `GET /v1/accounts` says the account is `reconnect_required` (or a delivery fails with `error_code: "reconnect"`), create a session with its `account_id` and send the customer to that link to sign it in again.
+
+### The redirect
+
+The customer's browser goes to `redirect_url` with these set in its query; anything else already there is kept.
+
+| Parameter | When | Value |
+| --- | --- | --- |
+| `status` | always | `connected`, or `error` |
+| `session` | always | the session's `id` |
+| `account_id` | `connected` | the account's id, as `GET /v1/accounts` gives it |
+| `platform` | `connected` | the account's platform: `linkedin` for a LinkedIn company Page |
+| `profile` | `connected` | the profile's id |
+| `error` | `error` | `access_denied` (they said no, or went back without connecting), `account_limit` (the plan's connected accounts are all in use), `conflict` (the profile already has an account on that platform, or the account is already in another of your profiles) or `failed` (anything else) |
+
+`redirect_url` must be `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` while you develop, with no `#fragment`.
+
+### How long a link works
+
+A link works until an account is connected through it, then never again.
+Unused, it expires an hour after it was made, or after `expires_in` seconds, from 300 to 86400.
+Opening it again in another tab or browser takes over from the first, which then stops working.
+The link is in the answer to `POST /v1/connect/sessions` only: Postatron keeps a hash of it, not the link, so treat it like a password until it is used.
+
+### The rules that apply
+
+The plan's connected-account allowance applies: with every account in use, creating a session is `402 quota_exceeded` with `details.resource` = `connected_accounts`, and so is finishing one if the last place went in the meantime.
+A session with `account_id` signs that account in again where it is, so it does not count against the allowance.
+A profile holds one account per platform: naming a platform that already has an account in the profile, or asking for a profile that has an account on every platform you named, is `409 conflict`, with `details.platforms` and `details.account_ids`.
+An account the customer signs in with that is already in another of your profiles is refused rather than moved, and going back from the page then says `error=conflict`.
+
+### POST /v1/connect/sessions
+
+```json
+{ "profile": "Acme Ltd", "platforms": ["instagram", "facebook", "linkedin_page"], "redirect_url": "https://app.example.com/integrations/social/done", "expires_in": 3600 }
+```
+
+- `profile`: the profile (id or name) the account joins, required unless `account_id` is given.
+- `platforms`: the platforms the customer may choose from: `x`, `instagram`, `facebook`, `linkedin`, `linkedin_page` (a LinkedIn company Page), `tiktok`, `youtube`, `threads`, `bluesky` or `pinterest`.
+  Left out, every platform the profile has no account on yet.
+  With one, the page offers only that one.
+- `account_id`: a connected account to sign in again, in its own profile, instead of connecting a new one.
+- `redirect_url`: required; see [The redirect](#the-redirect).
+- `expires_in`: seconds, 300 to 86400; 3600 when left out.
+
+Returns `201` with the session and its `url`.
+It needs `accounts:read` as well as `posts:write`.
+A team workspace key can make links only for the profiles its holder was granted; any other profile is `422 validation_error`, like an unknown one.
+An `account_id` that is not connected, or not in the key's profiles, is `404 not_found`.
+
+### GET /v1/connect/sessions/{id}
+
+Returns the session without its `url`.
+`status` is `pending` until an account is connected through the link, `connected` after (with `connected_at`, and `account` while that account is still connected), or `expired` once it ran out unused.
+Sessions are kept for 7 days after they are made, then answer `404 not_found`.
 
 ## Plans
 

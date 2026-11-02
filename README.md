@@ -86,6 +86,8 @@ postatron list-events --range 24h --status error
 postatron list-accounts
 postatron connect-account instagram --profile Acme
 postatron list-profiles
+postatron create-profile "Acme Ltd"
+postatron create-connect-session --profile "Acme Ltd" --platforms instagram --redirect-url https://app.example.com/connected
 postatron list-queues
 postatron create-queue --name "Weekday mornings" --timezone Europe/London --slots "mon 09:00,wed 09:00"
 postatron create-post --content "Whenever there's room" --platforms x --queue "Weekday mornings"

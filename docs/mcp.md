@@ -19,6 +19,11 @@ There are two ways to connect, with the same tools:
 | `list_accounts` | `GET /v1/accounts` | none |
 | `connect_account` | `POST /v1/accounts/connect` | `platform`, `profile`, `account_id` (one of `platform` or `account_id`) |
 | `list_profiles` | `GET /v1/profiles` | none |
+| `create_profile` | `POST /v1/profiles` | `name` (required) |
+| `update_profile` | `PATCH /v1/profiles/{id}` | `profile` (required, name or id), `name` (required) |
+| `delete_profile` | `DELETE /v1/profiles/{id}` | `profile` (required, name or id) |
+| `create_connect_session` | `POST /v1/connect/sessions` | `redirect_url` (required), `profile` (required unless `account_id`), `platforms`, `account_id`, `expires_in` |
+| `get_connect_session` | `GET /v1/connect/sessions/{id}` | `session_id` (required) |
 | `list_queues` | `GET /v1/queues` | none |
 | `create_queue` | `POST /v1/queues` | `name`, `timezone` (required), `profile`, `slots`, `paused` |
 | `update_queue` | `PATCH /v1/queues/{id}` | `queue` (required, name or id), `name`, `profile`, `timezone`, `slots`, `active`, `move_posts` |
@@ -28,7 +33,7 @@ There are two ways to connect, with the same tools:
 | `create_upload` | `POST /v1/media/uploads` | `purpose` |
 | `get_upload` | `GET /v1/media/uploads/{id}` | `upload_id` |
 
-The nineteen tools, their arguments, descriptions and hints are the same on both servers.
+The twenty-four tools, their arguments, descriptions and hints are the same on both servers.
 The local server also takes `id` in place of `post_id` on `get_post` and `delete_post`, the name it used before.
 Tool calls are metered and rate limited exactly like the API (see `docs/api.md`).
 API errors come back as tool errors with the API's `code` and message, so the model can explain a quota or scope problem, or ask which profile you meant, instead of failing silently.
@@ -38,6 +43,8 @@ When a post fails, each failed delivery carries an `error_code` that says what t
 A post or edit to such an account is refused up front with `reconnect_required`.
 `list_events` reads the Logs page, for "what failed this week, and why".
 A draft whose `unpublished.reason` is `no_plan` came due while the account had no plan; once there is one, `update_post` schedules or publishes it.
+`connect_account` is for the person's own accounts: its link only works signed in to their Postatron account.
+For someone with no Postatron login, such as a customer of an app built on Postatron, `create_profile` makes them a profile and `create_connect_session` a hosted link that connects an account into it; `get_connect_session` confirms what came of it (see `docs/api.md`, Connect your customers' accounts).
 
 `create_post` takes an `idempotency_key`, sent as the API's `Idempotency-Key` header: a call that timed out or failed before the agent saw its answer can be made again with the same key and arguments, and it gets back the post the first call made instead of making a second.
 The same key with different arguments is refused with `idempotency_key_reused`, and one sent while the first is still running with `idempotency_key_in_use`.
@@ -114,7 +121,7 @@ Or build from a checkout: `make build` produces `bin/postatron-mcp` and `bin/pos
 
    If `postatron-mcp` is not on Claude's `PATH`, use the absolute path, for example `/Users/you/go/bin/postatron-mcp`.
 3. Restart Claude Desktop.
-   The tools icon shows `postatron` with nineteen tools.
+   The tools icon shows `postatron` with twenty-four tools.
 
 ### Claude Code
 

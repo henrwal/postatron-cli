@@ -35,6 +35,11 @@ Create keys at `https://postatron.com/dashboard/api`.
 | `postatron list-accounts` | `GET /v1/accounts` |
 | `postatron connect-account [<platform>]` | `POST /v1/accounts/connect` |
 | `postatron list-profiles` | `GET /v1/profiles` |
+| `postatron create-profile <name>` | `POST /v1/profiles` |
+| `postatron rename-profile <profile> <name>` | `PATCH /v1/profiles/{id}` |
+| `postatron delete-profile <profile>` | `DELETE /v1/profiles/{id}` |
+| `postatron create-connect-session` | `POST /v1/connect/sessions` |
+| `postatron get-connect-session <id>` | `GET /v1/connect/sessions/{id}` |
 | `postatron list-queues` | `GET /v1/queues` |
 | `postatron create-queue` | `POST /v1/queues` |
 | `postatron update-queue <queue>` | `PATCH /v1/queues/{id}` |
@@ -191,6 +196,35 @@ ID        NAME     ACCOUNTS
 default   Default  x:henry, linkedin:henry-wallis
 8f2c1a9e  Acme     x:acmehq, instagram:acme
 ```
+
+### create-profile, rename-profile, delete-profile
+
+```bash
+postatron create-profile "Acme Ltd"
+postatron rename-profile "Acme Ltd" "Acme Studio"
+postatron delete-profile "Acme Studio"
+```
+
+A profile is named by its id or its name, ignoring case.
+Names are up to 40 characters and unique in the account; each plan allows a number of profiles, Default included.
+Only a profile with no accounts in it can be deleted, and never Default.
+A key made in a team workspace can list profiles but not change them.
+
+### create-connect-session, get-connect-session
+
+```bash
+postatron create-connect-session --profile "Acme Ltd" --platforms instagram,facebook --redirect-url https://app.example.com/connected
+postatron create-connect-session --account-id 1784140000000 --redirect-url https://app.example.com/connected --expires-in 900
+postatron get-connect-session cs_5f0c2a9e4b7d1c3e8a6f2b0d
+```
+
+`create-connect-session` prints a hosted connect link: someone with no Postatron login, such as a customer of your own app, opens it, signs in to the platform, and the account joins the profile.
+Then their browser goes to `--redirect-url` with `status=connected` and `account_id`, or `status=error`, in the query.
+`--platforms` limits what they can choose from (`linkedin_page` is a LinkedIn company Page); left out, it offers every platform the profile has no account on.
+`--account-id` makes a link that signs that account in again where it is, instead of connecting a new one.
+The link works until an account is connected through it, or for `--expires-in` seconds (300 to 86400, an hour by default), and it is printed only once.
+`get-connect-session` says whether it is `pending`, `connected` (with the account) or `expired`; check it rather than trusting the redirect's query.
+See `docs/api.md`, Connect your customers' accounts.
 
 ### list-queues
 
