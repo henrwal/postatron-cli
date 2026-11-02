@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.henrwal/postatron",
+  "name": "com.postatron/postatron",
   "title": "Postatron",
   "description": "Schedule, publish and measure social posts on X, Instagram, LinkedIn, TikTok, YouTube and more.",
   "websiteUrl": "https://postatron.com",
@@ -8,7 +8,7 @@
     "url": "https://github.com/henrwal/postatron-cli",
     "source": "github"
   },
-  "version": "1.15.0",
+  "version": "1.15.1",
   "remotes": [
     {
       "type": "streamable-http",
