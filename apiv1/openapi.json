@@ -4,7 +4,7 @@
     "title": "Postatron API",
     "version": "v1",
     "summary": "Schedule, publish and measure posts on every major social platform from one request.",
-    "description": "Postatron schedules and publishes one post to every social account it is given: X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok, YouTube and Pinterest.\nThis is its public REST API, version 1, as the API serves it.\nThe remote MCP server (`https://api.postatron.com/mcp`) and the CLI (`github.com/henrwal/postatron-cli`) are built on these routes and behave the same way.\n\n## Authentication\n\nCreate an API key in the dashboard under API & MCP (https://postatron.com/dashboard/api).\nKeys start `ptn_`, are shown once, and carry the scopes chosen when the key is made: `posts:read`, `posts:write`, `accounts:read` and `usage:read`.\nSend the key as `Authorization: Bearer ptn_...`, or as `X-API-Key: ptn_...`.\nEach operation's security requirement names the scope it needs, and a key without it gets `403 insufficient_scope`.\n\nOAuth access tokens (`pto_...`), which MCP clients obtain for themselves through OAuth 2.1, work only on the MCP endpoint: sent to these routes they get `401 unauthorized`.\n\nEvery operation except `GET /v1/openapi.json` needs an active paid plan, reads included; without one the answer is `403 subscription_required`, with `details.plans_url` saying where to choose one.\n\nA key made in a team workspace works in the owner's account, sees only the profiles its holder was granted, and is held to the owner's plan.\nMembership is checked on every request, so once its holder leaves the team, or the owner's plan stops including teams, it gets `403 workspace_forbidden`.\n\n## Profiles\n\nA profile groups connected accounts, usually one per brand or client, and holds at most one account per platform.\nWherever a route takes a `profile`, it accepts the profile's `id` or its name, ignoring case; an unknown one is `422 validation_error` with `details.profiles` listing those that exist.\n\n## Quota\n\nPosts are not capped.\nThey are counted in destination-posts, one post delivered to one account, so a post to X, LinkedIn and Bluesky is three, and reported by `GET /v1/usage`.\nX is the exception, because X bills every post: each plan caps posts to X per calendar month (UTC), each tweet of a thread counting as one, and has a smaller monthly cap on X posts with a link.\nThey are counted when the post is made.\nAn X cap is a hard stop: a request past one gets `402 quota_exceeded` and nothing is published or billed, while posts to every other platform carry on.\n\n## Rate limits\n\nEach key is limited per minute, in fixed one-minute windows: writes (`POST`, `PATCH` and `DELETE`), reads (`GET`) and upload slots (`POST /v1/media/uploads`) are counted separately, and each operation names its class in `x-postatron-rate-limit`.\nEvery plan allows 30 writes, 60 reads and 120 upload slots a minute today; `GET /v1/usage` reports the limits in force, so read them from there.\nA response that got as far as the rate limiter carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` for its class.\nOver the limit the answer is `429 rate_limited`, with `Retry-After` in seconds.\n\n## Errors\n\nEvery non-2xx answer is the same envelope, `{\"error\": {\"code\": \"...\", \"message\": \"...\", \"details\": {...}}}`.\n`code` is stable and meant for programs, `message` is a sentence for a person, and `details`, when present, names the fields and values involved.\n\n## Idempotency\n\n`POST /v1/posts` takes an `Idempotency-Key` header, so a request whose answer was lost can be sent again without making a second post.\n\n## Webhooks\n\nA webhook POSTs the account's events, signed, to a URL its owner registers: see the `webhooks` section of this document for each event's body and headers, and the Webhooks routes for managing them.\nWebhooks are included on Growth and Scale: on Starter, creating, changing, testing or rotating one is `403 plan_upgrade_required`, while listing and deleting still work.\n",
+    "description": "Postatron schedules and publishes one post to every social account it is given: X, LinkedIn, Instagram, Facebook, Threads, Bluesky, TikTok, YouTube and Pinterest.\nThis is its public REST API, version 1, as the API serves it.\nThe remote MCP server (`https://api.postatron.com/mcp`) and the CLI (`github.com/henrwal/postatron-cli`) are built on these routes and behave the same way.\n\n## Authentication\n\nCreate an API key in the dashboard under API & MCP (https://postatron.com/dashboard/api).\nKeys start `ptn_`, are shown once, and carry the scopes chosen when the key is made: `posts:read`, `posts:write`, `accounts:read` and `usage:read`.\nSend the key as `Authorization: Bearer ptn_...`, or as `X-API-Key: ptn_...`.\nEach operation's security requirement names the scope it needs, and a key without it gets `403 insufficient_scope`.\n\nOAuth access tokens (`pto_...`), which MCP clients obtain for themselves through OAuth 2.1, work only on the MCP endpoint: sent to these routes they get `401 unauthorized`.\n\nEvery operation except `GET /v1/openapi.json` needs an active paid plan, reads included; without one the answer is `403 subscription_required`, with `details.plans_url` saying where to choose one.\n\nA key made in a team workspace works in the owner's account, sees only the profiles its holder was granted, and is held to the owner's plan.\nMembership is checked on every request, so once its holder leaves the team, or the owner's plan stops including teams, it gets `403 workspace_forbidden`.\n\n## Profiles\n\nA profile groups connected accounts, usually one per brand or client, and holds at most one account per platform.\nWherever a route takes a `profile`, it accepts the profile's `id` or its name, ignoring case; an unknown one is `422 validation_error` with `details.profiles` listing those that exist.\n\n## Hosted connect\n\nAn app built on Postatron can let its own customers connect their social accounts without a Postatron login: make a profile per customer, create a connect session for it, and send the customer to the session's `url`.\nPostatron's page runs the platform's sign-in, puts the account in the profile and sends the customer back to the app; see the Connect routes.\n\n## Quota\n\nPosts are not capped.\nThey are counted in destination-posts, one post delivered to one account, so a post to X, LinkedIn and Bluesky is three, and reported by `GET /v1/usage`.\nX is the exception, because X bills every post: each plan caps posts to X per calendar month (UTC), each tweet of a thread counting as one, and has a smaller monthly cap on X posts with a link.\nThey are counted when the post is made.\nAn X cap is a hard stop: a request past one gets `402 quota_exceeded` and nothing is published or billed, while posts to every other platform carry on.\n\n## Rate limits\n\nEach key is limited per minute, in fixed one-minute windows: writes (`POST`, `PATCH` and `DELETE`), reads (`GET`) and upload slots (`POST /v1/media/uploads`) are counted separately, and each operation names its class in `x-postatron-rate-limit`.\nEvery plan allows 30 writes, 60 reads and 120 upload slots a minute today; `GET /v1/usage` reports the limits in force, so read them from there.\nA response that got as far as the rate limiter carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` for its class.\nOver the limit the answer is `429 rate_limited`, with `Retry-After` in seconds.\n\n## Errors\n\nEvery non-2xx answer is the same envelope, `{\"error\": {\"code\": \"...\", \"message\": \"...\", \"details\": {...}}}`.\n`code` is stable and meant for programs, `message` is a sentence for a person, and `details`, when present, names the fields and values involved.\n\n## Idempotency\n\n`POST /v1/posts` takes an `Idempotency-Key` header, so a request whose answer was lost can be sent again without making a second post.\n\n## Webhooks\n\nA webhook POSTs the account's events, signed, to a URL its owner registers: see the `webhooks` section of this document for each event's body and headers, and the Webhooks routes for managing them.\nWebhooks are included on Growth and Scale: on Starter, creating, changing, testing or rotating one is `403 plan_upgrade_required`, while listing and deleting still work.\n",
     "termsOfService": "https://postatron.com/terms",
     "contact": {
       "name": "Postatron support",
@@ -46,6 +46,10 @@
     {
       "name": "Profiles",
       "description": "Groups of accounts, one per brand or client."
+    },
+    {
+      "name": "Connect",
+      "description": "Hosted connect pages for your own customers' accounts."
     },
     {
       "name": "Queues",
@@ -1234,6 +1238,469 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProfile",
+        "summary": "Create a profile",
+        "description": "Creates an empty profile. An app whose own customers connect their accounts usually makes one per customer, then a connect session for it (`POST /v1/connect/sessions`). Each plan allows a number of profiles, Default included; past it, the answer is `402 quota_exceeded` with `details.resource` `profiles`. A name already in use, ignoring case, is `409 conflict`. Only the account's owner manages profiles, so a team workspace key gets `403 workspace_forbidden`.",
+        "tags": [
+          "Profiles"
+        ],
+        "security": [
+          {
+            "ApiKey": [
+              "posts:write"
+            ]
+          },
+          {
+            "ApiKeyHeader": [
+              "posts:write"
+            ]
+          }
+        ],
+        "x-postatron-rate-limit": "write",
+        "requestBody": {
+          "description": "The profile.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileRequest"
+              },
+              "examples": {
+                "customer": {
+                  "value": {
+                    "name": "Acme Ltd"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The profile, with no accounts yet.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                },
+                "example": {
+                  "id": "8f2c1a9e",
+                  "name": "Acme Ltd",
+                  "is_default": false,
+                  "accounts": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/profiles/{profile_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProfileId"
+        }
+      ],
+      "patch": {
+        "operationId": "updateProfile",
+        "summary": "Rename a profile",
+        "description": "Renames a profile, Default included. Its accounts, posts and queues stay as they are. A name already in use by another profile, ignoring case, is `409 conflict`. Only the account's owner manages profiles, so a team workspace key gets `403 workspace_forbidden`.",
+        "tags": [
+          "Profiles"
+        ],
+        "security": [
+          {
+            "ApiKey": [
+              "posts:write"
+            ]
+          },
+          {
+            "ApiKeyHeader": [
+              "posts:write"
+            ]
+          }
+        ],
+        "x-postatron-rate-limit": "write",
+        "requestBody": {
+          "description": "The new name.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              },
+              "examples": {
+                "rename": {
+                  "value": {
+                    "name": "Acme Studio"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The profile as it now is, with its accounts.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                },
+                "example": {
+                  "id": "8f2c1a9e",
+                  "name": "Acme Studio",
+                  "is_default": false,
+                  "accounts": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProfile",
+        "summary": "Delete a profile",
+        "description": "Deletes a profile with no accounts in it. While it has any, the answer is `409 conflict` with `details.account_ids`: disconnect them, or move them to another profile in the dashboard, first. The Default profile cannot be deleted (`422 validation_error`). Only the account's owner manages profiles, so a team workspace key gets `403 workspace_forbidden`.",
+        "tags": [
+          "Profiles"
+        ],
+        "security": [
+          {
+            "ApiKey": [
+              "posts:write"
+            ]
+          },
+          {
+            "ApiKeyHeader": [
+              "posts:write"
+            ]
+          }
+        ],
+        "x-postatron-rate-limit": "write",
+        "responses": {
+          "200": {
+            "description": "It is gone.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteProfileResponse"
+                },
+                "example": {
+                  "id": "8f2c1a9e",
+                  "deleted": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/connect/sessions": {
+      "post": {
+        "operationId": "createConnectSession",
+        "summary": "Create a hosted connect link",
+        "description": "Creates a link that lets someone with no Postatron login, such as a customer of your own app, connect one of their social accounts into one of your profiles. Send their browser to `url`: a page on postatron.com that says which site is asking (the host of `redirect_url`) and that it is through Postatron, runs the platform's own sign-in (for Bluesky, a handle and an app password), puts the account in the profile, and sends them to `redirect_url`.\n\nThe redirect's query says what happened: `status=connected` with `account_id`, `platform`, `profile` and `session`, or `status=error` with `error` (`access_denied`, `account_limit`, `conflict` or `failed`) and `session`. Anything already in `redirect_url`'s query is kept. Anyone can type a query string, so confirm the account with `GET /v1/connect/sessions/{session_id}` (or the `account.connected` webhook) before relying on it.\n\nThe link works until an account is connected through it, or it expires: an hour by default, 300 to 86400 seconds with `expires_in`. Opening it again in another tab or browser takes over from the first. `url` is only in this answer: Postatron keeps a hash of the link, not the link.\n\nThe plan's connected-account allowance applies (`402 quota_exceeded`, `details.resource` `connected_accounts`), except to a session made with `account_id`, which signs that account in again where it is. A profile holds one account per platform: a platform named in `platforms` that already has an account in the profile, or a profile with an account on every platform asked for, is `409 conflict`. The page uses Postatron's own platform apps, so Instagram, Facebook and Threads (waiting on Meta's App Review) and TikTok (waiting on TikTok's reviews) work only for people with a role on those apps until the reviews pass.\n\nTakes `accounts:read` as well as `posts:write`. A team workspace key can make links only for the profiles its holder was granted.",
+        "tags": [
+          "Connect"
+        ],
+        "security": [
+          {
+            "ApiKey": [
+              "posts:write",
+              "accounts:read"
+            ]
+          },
+          {
+            "ApiKeyHeader": [
+              "posts:write",
+              "accounts:read"
+            ]
+          }
+        ],
+        "x-postatron-rate-limit": "write",
+        "requestBody": {
+          "description": "Where the account goes, and where the person goes afterwards.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConnectSessionRequest"
+              },
+              "examples": {
+                "new_customer": {
+                  "value": {
+                    "profile": "Acme Ltd",
+                    "platforms": [
+                      "instagram",
+                      "facebook",
+                      "linkedin_page"
+                    ],
+                    "redirect_url": "https://app.example.com/integrations/social/done?customer=42"
+                  }
+                },
+                "reconnect": {
+                  "value": {
+                    "account_id": "17841400000000000",
+                    "redirect_url": "https://app.example.com/integrations/social/done?customer=42",
+                    "expires_in": 900
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session, with the link to send the person to.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectSession"
+                },
+                "example": {
+                  "id": "cs_5f0c2a9e4b7d1c3e8a6f2b0d",
+                  "url": "https://postatron.com/connect/ptc_Jx3m0Qf8v2Kd9LwYc1Hn5Rt7Bz4Ua6Ps0Ge2Vi8Ok1Mq",
+                  "status": "pending",
+                  "profile_id": "8f2c1a9e",
+                  "profile_name": "Acme Ltd",
+                  "platforms": [
+                    "instagram",
+                    "facebook",
+                    "linkedin_page"
+                  ],
+                  "redirect_url": "https://app.example.com/integrations/social/done?customer=42",
+                  "created_at": "2026-11-02T09:10:00Z",
+                  "expires_at": "2026-11-02T10:10:00Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/connect/sessions/{session_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionId"
+        }
+      ],
+      "get": {
+        "operationId": "getConnectSession",
+        "summary": "Check a hosted connect link",
+        "description": "What came of a connect link: `pending` until an account is connected through it, then `connected` with `connected_at` and the `account` (while it is still connected), or `expired` once it ran out unused. The link itself is never returned again. Sessions are kept for 7 days after they are made; after that, and for one outside a team workspace key's profiles, the answer is `404 not_found`.",
+        "tags": [
+          "Connect"
+        ],
+        "security": [
+          {
+            "ApiKey": [
+              "accounts:read"
+            ]
+          },
+          {
+            "ApiKeyHeader": [
+              "accounts:read"
+            ]
+          }
+        ],
+        "x-postatron-rate-limit": "read",
+        "responses": {
+          "200": {
+            "description": "The session.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectSession"
+                },
+                "example": {
+                  "id": "cs_5f0c2a9e4b7d1c3e8a6f2b0d",
+                  "status": "connected",
+                  "profile_id": "8f2c1a9e",
+                  "profile_name": "Acme Ltd",
+                  "platforms": [
+                    "instagram",
+                    "facebook",
+                    "linkedin_page"
+                  ],
+                  "redirect_url": "https://app.example.com/integrations/social/done?customer=42",
+                  "created_at": "2026-11-02T09:10:00Z",
+                  "expires_at": "2026-11-02T10:10:00Z",
+                  "connected_at": "2026-11-02T09:12:40Z",
+                  "account": {
+                    "id": "17841400000000000",
+                    "platform": "instagram",
+                    "username": "acme.studio",
+                    "display_name": "Acme Studio",
+                    "status": "connected",
+                    "profile_id": "8f2c1a9e",
+                    "profile_name": "Acme Ltd",
+                    "connected_at": "2026-11-02T09:12:40Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2956,6 +3423,25 @@
           "type": "string"
         }
       },
+      "ProfileId": {
+        "name": "profile_id",
+        "in": "path",
+        "required": true,
+        "description": "A profile's id, or its name ignoring case.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "SessionId": {
+        "name": "session_id",
+        "in": "path",
+        "required": true,
+        "description": "A connect session's id, as `POST /v1/connect/sessions` gave it.",
+        "schema": {
+          "type": "string",
+          "pattern": "^cs_[0-9a-f]{24}$"
+        }
+      },
       "WebhookId": {
         "name": "webhook_id",
         "in": "path",
@@ -3138,7 +3624,7 @@
         }
       },
       "PaymentRequired": {
-        "description": "`quota_exceeded`: the request would go past one of the plan's hard caps, and nothing was done. `details.resource` names it: `x_posts` or `x_link_posts` (monthly, with `used`, `limit`, `requested` and `resets_at`), `connected_accounts`, or `queues` (with `limit`).",
+        "description": "`quota_exceeded`: the request would go past one of the plan's hard caps, and nothing was done. `details.resource` names it: `x_posts` or `x_link_posts` (monthly, with `used`, `limit`, `requested` and `resets_at`), `connected_accounts`, `profiles` or `queues` (with `limit`).",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
@@ -3176,7 +3662,7 @@
         }
       },
       "Forbidden": {
-        "description": "Refused for who is asking:\n\n- `insufficient_scope`: the key lacks the scope the operation needs; `details.required_scope` names it and `details.key_scopes` lists the key's.\n- `subscription_required`: the account has no active plan, which every operation needs, reads included; `details.plans_url` is where to choose one.\n- `plan_upgrade_required`: the plan does not include what was asked for, such as webhooks on Starter; `details.plans` names the plans that do and `details.plans_url` is where to change plan.\n- `workspace_forbidden`: the key works in a team workspace its holder can no longer work in (they left or were removed, or the owner's plan no longer includes teams), or asks for something only the owner may do, such as managing webhooks.",
+        "description": "Refused for who is asking:\n\n- `insufficient_scope`: the key lacks the scope the operation needs; `details.required_scope` names it and `details.key_scopes` lists the key's.\n- `subscription_required`: the account has no active plan, which every operation needs, reads included; `details.plans_url` is where to choose one.\n- `plan_upgrade_required`: the plan does not include what was asked for, such as webhooks on Starter; `details.plans` names the plans that do and `details.plans_url` is where to change plan.\n- `workspace_forbidden`: the key works in a team workspace its holder can no longer work in (they left or were removed, or the owner's plan no longer includes teams), or asks for something only the owner may do, such as managing webhooks or profiles.",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
@@ -3239,7 +3725,7 @@
         }
       },
       "NotFound": {
-        "description": "`not_found`: there is no such post, account, queue, upload or webhook in this account, or none the key may see.",
+        "description": "`not_found`: there is no such post, account, profile, queue, upload, webhook or connect session in this account, or none the key may see.",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
@@ -3270,7 +3756,7 @@
         }
       },
       "Conflict": {
-        "description": "The resource is not in a state the request can act on, and nothing was changed. `conflict`: the post has started publishing, a queue is paused or cannot take the post, a retry found nothing that failed (`details.reason` is `not_retryable`, `not_failed` or `conflict`), or a profile already has an account on the platform. `idempotency_key_in_use`: a request with the same `Idempotency-Key` is still being handled; send it again after `Retry-After`.",
+        "description": "The resource is not in a state the request can act on, and nothing was changed. `conflict`: the post has started publishing, a queue is paused or cannot take the post, a retry found nothing that failed (`details.reason` is `not_retryable`, `not_failed` or `conflict`), a profile already has an account on the platform, a profile's name is taken, or a profile still has accounts. `idempotency_key_in_use`: a request with the same `Idempotency-Key` is still being handled; send it again after `Retry-After`.",
         "headers": {
           "X-RateLimit-Limit": {
             "$ref": "#/components/headers/X-RateLimit-Limit"
@@ -4588,6 +5074,186 @@
         },
         "required": [
           "data"
+        ]
+      },
+      "CreateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Up to 40 characters, unique in the account ignoring case; spaces at the ends and runs of spaces are tidied.",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The new name: up to 40 characters, unique in the account ignoring case.",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "DeleteProfileResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The profile's id."
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "True."
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ]
+      },
+      "CreateConnectSessionRequest": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "description": "The profile (id or name) the account joins, typically one made for this customer. Required unless `account_id` is given."
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "x",
+                "instagram",
+                "facebook",
+                "linkedin",
+                "linkedin_page",
+                "tiktok",
+                "youtube",
+                "threads",
+                "bluesky",
+                "pinterest"
+              ]
+            },
+            "description": "The platforms the person may choose from; `linkedin_page` is a LinkedIn company Page. Left out, every platform the profile has no account on yet. With `account_id`, only that account's platform, if given at all."
+          },
+          "account_id": {
+            "type": "string",
+            "description": "A connected account's id: the link signs that account in again where it is, for one that says `reconnect_required`, instead of connecting a new one."
+          },
+          "redirect_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the person's browser goes afterwards: `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` for development; no fragment. Its query is kept, with `status`, `session`, `account_id`, `platform`, `profile` and `error` set by Postatron."
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds the link works for. Left out, 3600.",
+            "minimum": 300,
+            "maximum": 86400
+          }
+        },
+        "required": [
+          "redirect_url"
+        ]
+      },
+      "ConnectSession": {
+        "type": "object",
+        "description": "A hosted connect link and what came of it.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The session's id: `cs_` and 24 hex characters. The redirect's `session` is this."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The page to send the person to. Only in the answer to `POST /v1/connect/sessions`: Postatron keeps a hash of it, not the link."
+          },
+          "status": {
+            "type": "string",
+            "description": "`pending` until an account is connected through the link, `connected` after, or `expired` once it ran out unused.",
+            "enum": [
+              "pending",
+              "connected",
+              "expired"
+            ]
+          },
+          "profile_id": {
+            "type": "string",
+            "description": "The profile the account joins."
+          },
+          "profile_name": {
+            "type": "string",
+            "description": "That profile's name."
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "x",
+                "instagram",
+                "facebook",
+                "linkedin",
+                "linkedin_page",
+                "tiktok",
+                "youtube",
+                "threads",
+                "bluesky",
+                "pinterest"
+              ]
+            },
+            "description": "The platforms the page offers, as asked for or as found free when it was made; `linkedin_page` is a LinkedIn company Page."
+          },
+          "account_id": {
+            "type": "string",
+            "description": "The account the link signs in again, when it was made for one."
+          },
+          "redirect_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the person is sent afterwards."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was made."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the link stops working if nobody has used it."
+          },
+          "connected_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When an account was connected through it."
+          },
+          "account": {
+            "$ref": "#/components/schemas/Account",
+            "description": "The account connected through the link, while it is still connected. Its `platform` is `linkedin` for a LinkedIn Page."
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "profile_id",
+          "profile_name",
+          "platforms",
+          "redirect_url",
+          "created_at",
+          "expires_at"
         ]
       },
       "QueueSlot": {
