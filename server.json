@@ -8,7 +8,7 @@
     "url": "https://github.com/henrwal/postatron-cli",
     "source": "github"
   },
-  "version": "1.15.1",
+  "version": "1.18.0",
   "remotes": [
     {
       "type": "streamable-http",
