@@ -96,7 +96,7 @@ They are counted in **destination-posts**, one post delivered to one account, so
 `destination_posts` reports them with a `null` limit, and deliveries whose text contains a link are counted as well (`link_posts`).
 
 X is the one platform with a monthly cap, because X bills Postatron for every post and every other platform is free to post to.
-`x_posts` counts posts to X per calendar month (UTC): 300 on Starter, 1,500 on Growth and 4,000 on Scale.
+`x_posts` counts posts to X per calendar month (UTC): 300 on Starter, 1,000 on Growth and 2,500 on Scale.
 X posts with a link (`x_link_posts`) have a smaller cap inside that, because X charges far more for them: 30 on Starter, 80 on Growth, 200 on Scale.
 Each tweet of an X thread counts as its own X post, and as an X link post if it has a link.
 Links are detected in the post text: `http(s)://` URLs, `www.` hosts and bare domains with a common TLD.
@@ -1110,7 +1110,7 @@ Sessions are kept for 7 days after they are made, then answer `404 not_found`.
 | Plan | Price | Posts | X posts / month | X posts with a link / month | Accounts | Profiles |
 | --- | --- | --- | --- | --- | --- | --- |
 | Starter | $15/mo or $150/yr | Unlimited | 300 | 30 | 5 | 2 |
-| Growth | $39/mo or $390/yr | Unlimited | 1,500 | 80 | 15 | 5 |
-| Scale | $99/mo or $990/yr | Unlimited | 4,000 | 200 | 50 | 20 |
+| Growth | $39/mo or $390/yr | Unlimited | 1,000 | 80 | 15 | 5 |
+| Scale | $99/mo or $990/yr | Unlimited | 2,500 | 200 | 50 | 20 |
 
 Prices are fixed: nothing is billed beyond the plan, monthly or yearly.
