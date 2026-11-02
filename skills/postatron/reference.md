@@ -87,7 +87,7 @@ Every error has the shape `{"error": {"code": "...", "message": "...", "details"
 | 400 | `validation_error` for a media URL that cannot be fetched |
 | 401 | `unauthorized` |
 | 402 | `quota_exceeded` |
-| 403 | `insufficient_scope`, `subscription_required`, `workspace_forbidden` |
+| 403 | `insufficient_scope`, `subscription_required`, `plan_upgrade_required`, `workspace_forbidden` |
 | 404 | `not_found` |
 | 409 | `conflict`: the post started publishing, the queue is paused or full, or a retry found nothing that failed |
 | 422 | `reconnect_required`: an account cannot post until it is signed in again (`details.account_ids`); `validation_error` otherwise |

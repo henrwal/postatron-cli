@@ -162,6 +162,7 @@ Non-2xx responses share one envelope:
 | 402 | `quota_exceeded` | A plan cap reached: X posts or X posts with a link this month (`details.resource` `x_posts` or `x_link_posts`), connected accounts or queues |
 | 403 | `insufficient_scope` | Key lacks the scope |
 | 403 | `subscription_required` | No active plan; `details.plans_url` is where to choose one |
+| 403 | `plan_upgrade_required` | The plan does not include it, such as webhooks on Starter; `details.plans` names the plans that do and `details.plans_url` is where to change |
 | 403 | `workspace_forbidden` | A team workspace key whose holder is no longer on the team, or one asking for something only the owner may do, such as managing webhooks |
 | 404 | `not_found` | Unknown endpoint, post, queue, upload or webhook |
 | 409 | `conflict` | The post started publishing, a queue is paused or full, or a retry found nothing that failed |
@@ -723,6 +724,8 @@ Pass a ready id to `POST /v1/posts` in `media_ids`.
 A webhook sends the account's events to your own server as they happen: Postatron POSTs a signed JSON body to its URL.
 An account can have five, each receiving every event or only those it chooses.
 Add them in the dashboard under **API & MCP** or with the endpoints below.
+Webhooks are included on Growth and Scale.
+On Starter, creating, changing, testing or rotating one is `403 plan_upgrade_required`, listing and deleting still work, and nothing is sent to a webhook while the plan does not include them.
 
 ### Events
 

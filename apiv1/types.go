@@ -29,6 +29,10 @@ const (
 	CodeUnauthorized         = "unauthorized"
 	CodeInsufficientScope    = "insufficient_scope"
 	CodeSubscriptionRequired = "subscription_required"
+	// CodePlanUpgradeRequired means the account's plan does not include what
+	// was asked for, such as webhooks on Starter; details.plans names the
+	// plans that do and details.plans_url is where to change plan.
+	CodePlanUpgradeRequired = "plan_upgrade_required"
 	// CodeWorkspaceForbidden means the key or connection was made for a team
 	// workspace its holder can no longer work in: they left or were removed,
 	// or the owner's plan no longer includes teams. It also refuses a

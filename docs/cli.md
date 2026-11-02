@@ -259,6 +259,8 @@ Once `get-upload` reports `READY`, pass the id to `create-post --media-ids`.
 
 ### webhooks
 
+Webhooks are included on Growth and Scale; on Starter the commands that set one up answer `plan_upgrade_required`.
+
 ```bash
 postatron webhooks create --url https://example.com/webhooks/postatron
 postatron webhooks create --url https://example.com/hooks --events post.failed,post.partial,account.needs_attention

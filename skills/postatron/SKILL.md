@@ -165,6 +165,7 @@ A post or edit to an account that cannot post is refused up front with `reconnec
 | `rate_limited` | Wait for the seconds in `retry_after` (or the `Retry-After` header), then retry once. |
 | `unauthorized`, `insufficient_scope` | The key or connection is missing a permission. Tell the person; do not retry. |
 | `subscription_required` | The account has no active plan, so nothing can be posted or read. Tell the person and give them the plans link from the message; do not retry. |
+| `plan_upgrade_required` | The plan does not include it (webhooks are Growth and Scale only). Tell the person which plans do, from `details.plans`, and give them the plans link; do not retry. |
 | `workspace_forbidden` | The key or connection works in a team they are no longer on. Tell them to reconnect, or make a key in their own account. |
 | `reconnect_required` | An account cannot post until it is signed in again. Call `connect_account` with each id in `details.account_ids`, give the person the link, and try again once they say it is done. |
 | `conflict` | The post is not in a state for that: it already started publishing, or (for `retry_post`) nothing on it failed. Read the message and tell the person. |
