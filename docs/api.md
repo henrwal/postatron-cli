@@ -1074,7 +1074,8 @@ The link is in the answer to `POST /v1/connect/sessions` only: Postatron keeps a
 
 ### The rules that apply
 
-The plan's connected-account allowance applies: with every account in use, creating a session is `402 quota_exceeded` with `details.resource` = `connected_accounts`, and so is finishing one if the last place went in the meantime.
+The plan's connected-account allowance applies: with every account in use, creating a session is `402 quota_exceeded` with `details.resource` = `connected_accounts`.
+If the last place goes after the session was made, the page refuses the customer too, and going back from it says `error=account_limit`.
 A session with `account_id` signs that account in again where it is, so it does not count against the allowance.
 A profile holds one account per platform: naming a platform that already has an account in the profile, or asking for a profile that has an account on every platform you named, is `409 conflict`, with `details.platforms` and `details.account_ids`.
 An account the customer signs in with that is already in another of your profiles is refused rather than moved, and going back from the page then says `error=conflict`.
