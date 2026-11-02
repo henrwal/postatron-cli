@@ -31,6 +31,46 @@ type fakeOps struct {
 	dropped  []string
 	retried  map[string][]string
 	events   []apiv1.ListEventsQuery
+	profiles []apiv1.CreateProfileRequest
+	renames  map[string]apiv1.UpdateProfileRequest
+	removed  []string
+	sessions []apiv1.CreateConnectSessionRequest
+	checked  []string
+}
+
+func (f *fakeOps) CreateProfile(_ context.Context, req apiv1.CreateProfileRequest) (*apiv1.Profile, error) {
+	f.profiles = append(f.profiles, req)
+	return &apiv1.Profile{ID: "8f2c1a9e", Name: req.Name, Accounts: []apiv1.Account{}}, nil
+}
+
+func (f *fakeOps) UpdateProfile(_ context.Context, id string, req apiv1.UpdateProfileRequest) (*apiv1.Profile, error) {
+	if f.renames == nil {
+		f.renames = map[string]apiv1.UpdateProfileRequest{}
+	}
+	f.renames[id] = req
+	return &apiv1.Profile{ID: "8f2c1a9e", Name: req.Name, Accounts: []apiv1.Account{}}, nil
+}
+
+func (f *fakeOps) DeleteProfile(_ context.Context, id string) (*apiv1.DeleteProfileResponse, error) {
+	f.removed = append(f.removed, id)
+	if id == "Busy" {
+		return nil, &apiv1.APIError{Status: http.StatusConflict, Code: apiv1.CodeConflict, Message: "the Busy profile still has accounts",
+			Details: map[string]any{"account_ids": []string{"ig1"}}}
+	}
+	return &apiv1.DeleteProfileResponse{ID: "8f2c1a9e", Deleted: true}, nil
+}
+
+func (f *fakeOps) CreateConnectSession(_ context.Context, req apiv1.CreateConnectSessionRequest) (*apiv1.ConnectSession, error) {
+	f.sessions = append(f.sessions, req)
+	return &apiv1.ConnectSession{ID: "cs_0123456789abcdef01234567", URL: "https://postatron.com/connect/ptc_secret", Status: apiv1.ConnectSessionPending,
+		ProfileID: "8f2c1a9e", ProfileName: "Acme", Platforms: req.Platforms, RedirectURL: req.RedirectURL}, nil
+}
+
+func (f *fakeOps) GetConnectSession(_ context.Context, id string) (*apiv1.ConnectSession, error) {
+	f.checked = append(f.checked, id)
+	return &apiv1.ConnectSession{ID: id, Status: apiv1.ConnectSessionConnected, ProfileID: "8f2c1a9e", ProfileName: "Acme",
+		Platforms: []string{"instagram"}, RedirectURL: "https://app.example.com/connected",
+		Account: &apiv1.Account{ID: "ig1", Platform: "instagram", Username: "acme.studio", ProfileID: "8f2c1a9e", ProfileName: "Acme"}}, nil
 }
 
 func (f *fakeOps) RetryPost(_ context.Context, id string, req apiv1.RetryPostRequest) (*apiv1.Post, error) {
@@ -188,7 +228,71 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		"create_post", "list_posts", "get_post", "delete_post", "update_post", "connect_account", "list_accounts", "list_profiles",
 		"list_queues", "get_usage", "get_analytics", "create_upload", "get_upload",
 		"delete_posts", "create_queue", "update_queue", "delete_queue", "retry_post", "list_events",
+		"create_profile", "update_profile", "delete_profile", "create_connect_session", "get_connect_session",
 	}, names)
+}
+
+// An app making a profile per customer, a hosted connect link for each, and
+// checking what came of it: each tool reaches its route with its arguments.
+func TestProfileAndConnectSessionTools(t *testing.T) {
+	ops := &fakeOps{}
+	session := connect(t, ops)
+	ctx := context.Background()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "create_profile", Arguments: map[string]any{"name": " Acme "}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	assert.Equal(t, []apiv1.CreateProfileRequest{{Name: "Acme"}}, ops.profiles)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "update_profile", Arguments: map[string]any{"profile": "Acme", "name": "Acme Ltd"}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	assert.Equal(t, apiv1.UpdateProfileRequest{Name: "Acme Ltd"}, ops.renames["Acme"])
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_profile", Arguments: map[string]any{"profile": "Acme Ltd"}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "delete_profile", Arguments: map[string]any{"profile": "Busy"}})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, toolText(res), "conflict: the Busy profile still has accounts")
+	assert.Equal(t, []string{"Acme Ltd", "Busy"}, ops.removed)
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "create_connect_session", Arguments: map[string]any{
+		"profile": "Acme", "platforms": []any{"instagram", "linkedin_page"}, "redirect_url": "https://app.example.com/connected", "expires_in": 1800,
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	assert.Equal(t, []apiv1.CreateConnectSessionRequest{{
+		Profile: "Acme", Platforms: []string{"instagram", "linkedin_page"}, RedirectURL: "https://app.example.com/connected", ExpiresIn: 1800,
+	}}, ops.sessions)
+	assert.Contains(t, toolText(res), "https://postatron.com/connect/ptc_secret")
+
+	// A reconnect names the account and needs no profile.
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "create_connect_session", Arguments: map[string]any{
+		"account_id": "ig1", "redirect_url": "http://localhost:3000/back",
+	}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	assert.Equal(t, apiv1.CreateConnectSessionRequest{AccountID: "ig1", RedirectURL: "http://localhost:3000/back"}, ops.sessions[1])
+
+	res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_connect_session", Arguments: map[string]any{"session_id": "cs_0123456789abcdef01234567"}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, toolText(res))
+	assert.Equal(t, []string{"cs_0123456789abcdef01234567"}, ops.checked)
+	assert.Contains(t, toolText(res), `"status":"connected"`)
+
+	// The required arguments are required, as the remote server says.
+	for name, args := range map[string]map[string]any{
+		"create_connect_session": {"profile": "Acme"},
+		"get_connect_session":    {},
+		"update_profile":         {"profile": "Acme"},
+	} {
+		res, err = session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err == nil {
+			assert.True(t, res.IsError, "%s without its required arguments", name)
+		}
+	}
 }
 
 // A key lets an agent that lost a create_post answer call it again safely;
@@ -482,4 +586,15 @@ func TestPinterestOptionsReachTheAPI(t *testing.T) {
 	require.NotNil(t, ops.updated[0].Pinterest)
 	assert.Equal(t, "Dinners", ops.updated[0].Pinterest.Board)
 	assert.Equal(t, "Ready in 20 minutes", ops.updated[0].Pinterest.Description)
+}
+
+// toolText is a tool result's text, for assertions and failure messages.
+func toolText(res *mcp.CallToolResult) string {
+	var parts []string
+	for _, c := range res.Content {
+		if text, ok := c.(*mcp.TextContent); ok {
+			parts = append(parts, text.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }

@@ -98,6 +98,11 @@ func newRootCommand(stdout, stderr io.Writer) (*cobra.Command, *globals) {
 		newListAccountsCommand(g),
 		newConnectAccountCommand(g),
 		newListProfilesCommand(g),
+		newCreateProfileCommand(g),
+		newRenameProfileCommand(g),
+		newDeleteProfileCommand(g),
+		newCreateConnectSessionCommand(g),
+		newGetConnectSessionCommand(g),
 		newListQueuesCommand(g),
 		newCreateQueueCommand(g),
 		newUpdateQueueCommand(g),
@@ -599,6 +604,157 @@ func newListProfilesCommand(g *globals) *cobra.Command {
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", p.ID, p.Name, summary)
 			}
 			return tw.Flush()
+		},
+	}
+}
+
+func printProfile(w io.Writer, p apiv1.Profile) {
+	fmt.Fprintf(w, "Profile %s  %q\n", p.ID, p.Name)
+	if len(p.Accounts) == 0 {
+		fmt.Fprintln(w, "Accounts:  (none)")
+		return
+	}
+	accounts := make([]string, 0, len(p.Accounts))
+	for _, a := range p.Accounts {
+		accounts = append(accounts, a.Platform+":"+a.Username)
+	}
+	fmt.Fprintf(w, "Accounts:  %s\n", strings.Join(accounts, ", "))
+}
+
+func newCreateProfileCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:     "create-profile <name>",
+		Short:   "Create a profile: a group of accounts for one brand or client, such as one of your own customers",
+		Example: `  postatron create-profile "Acme Ltd"`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, err := g.ops().CreateProfile(cmd.Context(), apiv1.CreateProfileRequest{Name: args[0]})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, p)
+			}
+			printProfile(g.out, *p)
+			return nil
+		},
+	}
+}
+
+func newRenameProfileCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:     "rename-profile <profile> <name>",
+		Short:   "Rename a profile (its accounts, posts and queues stay as they are)",
+		Example: `  postatron rename-profile Acme "Acme Ltd"`,
+		Args:    cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, err := g.ops().UpdateProfile(cmd.Context(), args[0], apiv1.UpdateProfileRequest{Name: args[1]})
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, p)
+			}
+			printProfile(g.out, *p)
+			return nil
+		},
+	}
+}
+
+func newDeleteProfileCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete-profile <profile>",
+		Short: "Delete a profile with no accounts in it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := g.ops().DeleteProfile(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, out)
+			}
+			fmt.Fprintf(g.out, "Deleted profile %s.\n", out.ID)
+			return nil
+		},
+	}
+}
+
+func printConnectSession(w io.Writer, s apiv1.ConnectSession) {
+	fmt.Fprintf(w, "Connect session %s  [%s]\n", s.ID, s.Status)
+	if s.URL != "" {
+		fmt.Fprintf(w, "Link:      %s\n", s.URL)
+	}
+	fmt.Fprintf(w, "Profile:   %s\n", s.ProfileName)
+	platforms := strings.Join(s.Platforms, ", ")
+	if platforms == "" {
+		platforms = "(none left to connect)"
+	}
+	fmt.Fprintf(w, "Platforms: %s\n", platforms)
+	if s.AccountID != "" {
+		fmt.Fprintf(w, "Reconnect: %s\n", s.AccountID)
+	}
+	fmt.Fprintf(w, "Returns to: %s\n", s.RedirectURL)
+	switch {
+	case s.Account != nil:
+		fmt.Fprintf(w, "Connected: %s:%s (%s)\n", s.Account.Platform, s.Account.Username, s.Account.ID)
+	case s.ConnectedAt != nil:
+		fmt.Fprintf(w, "Connected: %s, since disconnected\n", s.ConnectedAt.UTC().Format(time.RFC3339))
+	case s.Status == apiv1.ConnectSessionPending:
+		fmt.Fprintf(w, "Expires:   %s\n", s.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+}
+
+// newCreateConnectSessionCommand makes a hosted connect link: a page on
+// postatron.com where someone with no Postatron login, such as a customer of
+// your own app, connects a social account into one of your profiles.
+func newCreateConnectSessionCommand(g *globals) *cobra.Command {
+	var req apiv1.CreateConnectSessionRequest
+	cmd := &cobra.Command{
+		Use:   "create-connect-session",
+		Short: "Get a hosted connect link for someone without a Postatron login to connect an account into a profile",
+		Example: `  postatron create-connect-session --profile "Acme Ltd" --platforms instagram,facebook --redirect-url https://app.example.com/connected
+  postatron create-connect-session --account-id 1784140000000 --redirect-url https://app.example.com/connected`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if strings.TrimSpace(req.Profile) == "" && strings.TrimSpace(req.AccountID) == "" {
+				return usageError("name the --profile the account joins, or --account-id to sign a connected account in again")
+			}
+			session, err := g.ops().CreateConnectSession(cmd.Context(), req)
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, session)
+			}
+			printConnectSession(g.out, *session)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&req.Profile, "profile", "", "profile name or id the account joins (required unless --account-id)")
+	cmd.Flags().StringSliceVar(&req.Platforms, "platforms", nil, "platforms they may choose from, e.g. instagram,linkedin_page; default every one the profile has no account on")
+	cmd.Flags().StringVar(&req.AccountID, "account-id", "", "a connected account's id, so its owner can sign it in again where it is")
+	cmd.Flags().StringVar(&req.RedirectURL, "redirect-url", "", "where their browser goes afterwards: https, or http on localhost (required)")
+	cmd.Flags().IntVar(&req.ExpiresIn, "expires-in", 0, "seconds the link works for, 300 to 86400 (default 3600)")
+	_ = cmd.MarkFlagRequired("redirect-url")
+	return cmd
+}
+
+func newGetConnectSessionCommand(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "get-connect-session <id>",
+		Short: "Check a hosted connect link: pending, connected (with the account) or expired",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			session, err := g.ops().GetConnectSession(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if g.asJSON {
+				return printJSON(g.out, session)
+			}
+			printConnectSession(g.out, *session)
+			return nil
 		},
 	}
 }

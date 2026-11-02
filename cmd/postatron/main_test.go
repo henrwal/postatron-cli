@@ -26,6 +26,44 @@ type fakeOps struct {
 	queueDeletes []string
 	retried      map[string][]string
 	eventQueries []apiv1.ListEventsQuery
+	profileNames []string
+	renames      map[string]string
+	profileDrops []string
+	sessions     []apiv1.CreateConnectSessionRequest
+	sessionGets  []string
+}
+
+func (f *fakeOps) CreateProfile(_ context.Context, req apiv1.CreateProfileRequest) (*apiv1.Profile, error) {
+	f.profileNames = append(f.profileNames, req.Name)
+	return &apiv1.Profile{ID: "8f2c1a9e", Name: req.Name, Accounts: []apiv1.Account{}}, nil
+}
+
+func (f *fakeOps) UpdateProfile(_ context.Context, id string, req apiv1.UpdateProfileRequest) (*apiv1.Profile, error) {
+	if f.renames == nil {
+		f.renames = map[string]string{}
+	}
+	f.renames[id] = req.Name
+	return &apiv1.Profile{ID: "8f2c1a9e", Name: req.Name, Accounts: []apiv1.Account{{ID: "ig1", Platform: "instagram", Username: "acme.studio"}}}, nil
+}
+
+func (f *fakeOps) DeleteProfile(_ context.Context, id string) (*apiv1.DeleteProfileResponse, error) {
+	f.profileDrops = append(f.profileDrops, id)
+	return &apiv1.DeleteProfileResponse{ID: "8f2c1a9e", Deleted: true}, nil
+}
+
+func (f *fakeOps) CreateConnectSession(_ context.Context, req apiv1.CreateConnectSessionRequest) (*apiv1.ConnectSession, error) {
+	f.sessions = append(f.sessions, req)
+	return &apiv1.ConnectSession{ID: "cs_0123456789abcdef01234567", URL: "https://postatron.com/connect/ptc_secret", Status: apiv1.ConnectSessionPending,
+		ProfileName: "Acme Ltd", Platforms: req.Platforms, AccountID: req.AccountID, RedirectURL: req.RedirectURL,
+		ExpiresAt: time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)}, nil
+}
+
+func (f *fakeOps) GetConnectSession(_ context.Context, id string) (*apiv1.ConnectSession, error) {
+	f.sessionGets = append(f.sessionGets, id)
+	at := time.Date(2026, 11, 2, 9, 12, 0, 0, time.UTC)
+	return &apiv1.ConnectSession{ID: id, Status: apiv1.ConnectSessionConnected, ProfileName: "Acme Ltd", Platforms: []string{"instagram"},
+		RedirectURL: "https://app.example.com/connected", ConnectedAt: &at,
+		Account: &apiv1.Account{ID: "ig1", Platform: "instagram", Username: "acme.studio"}}, nil
 }
 
 func (f *fakeOps) RetryPost(_ context.Context, id string, req apiv1.RetryPostRequest) (*apiv1.Post, error) {
@@ -196,6 +234,7 @@ func TestCommands(t *testing.T) {
 		"create-post", "list-posts", "get-post", "delete-post", "list-accounts", "list-profiles", "list-queues", "get-usage", "get-analytics",
 		"create-upload", "get-upload", "update-post", "connect-account",
 		"delete-posts", "create-queue", "update-queue", "delete-queue", "retry-post", "list-events", "webhooks",
+		"create-profile", "rename-profile", "delete-profile", "create-connect-session", "get-connect-session",
 	}, names)
 }
 
@@ -316,6 +355,57 @@ func TestRetryPostAndEvents(t *testing.T) {
 
 	_, err = run(t, ops, "connect-account")
 	require.Error(t, err, "a platform or an account to reconnect")
+}
+
+func TestProfileCommands(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "create-profile", "Acme Ltd")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Acme Ltd"}, ops.profileNames)
+	assert.Contains(t, out, `Profile 8f2c1a9e  "Acme Ltd"`)
+	assert.Contains(t, out, "(none)")
+
+	out, err = run(t, ops, "rename-profile", "Acme", "Acme Studio")
+	require.NoError(t, err)
+	assert.Equal(t, "Acme Studio", ops.renames["Acme"])
+	assert.Contains(t, out, "instagram:acme.studio")
+
+	out, err = run(t, ops, "delete-profile", "Acme Studio")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Acme Studio"}, ops.profileDrops)
+	assert.Contains(t, out, "Deleted profile 8f2c1a9e.")
+
+	_, err = run(t, ops, "rename-profile", "Acme")
+	assert.Error(t, err, "a new name is needed")
+}
+
+func TestConnectSessionCommands(t *testing.T) {
+	ops := &fakeOps{}
+	out, err := run(t, ops, "create-connect-session", "--profile", "Acme Ltd", "--platforms", "instagram,linkedin_page",
+		"--redirect-url", "https://app.example.com/connected", "--expires-in", "1800")
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.CreateConnectSessionRequest{Profile: "Acme Ltd", Platforms: []string{"instagram", "linkedin_page"},
+		RedirectURL: "https://app.example.com/connected", ExpiresIn: 1800}, ops.sessions[0])
+	assert.Contains(t, out, "Link:      https://postatron.com/connect/ptc_secret")
+	assert.Contains(t, out, "Platforms: instagram, linkedin_page")
+	assert.Contains(t, out, "Expires:   2026-11-02T10:00:00Z")
+
+	_, err = run(t, ops, "create-connect-session", "--account-id", "ig1", "--redirect-url", "http://localhost:3000/back")
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.CreateConnectSessionRequest{AccountID: "ig1", RedirectURL: "http://localhost:3000/back"}, ops.sessions[1])
+
+	_, err = run(t, ops, "create-connect-session", "--redirect-url", "https://app.example.com/connected")
+	assert.Error(t, err, "a profile or an account to reconnect")
+	_, err = run(t, ops, "create-connect-session", "--profile", "Acme Ltd")
+	assert.Error(t, err, "--redirect-url is required")
+	assert.Len(t, ops.sessions, 2)
+
+	out, err = run(t, ops, "get-connect-session", "cs_0123456789abcdef01234567")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cs_0123456789abcdef01234567"}, ops.sessionGets)
+	assert.Contains(t, out, "[connected]")
+	assert.Contains(t, out, "Connected: instagram:acme.studio (ig1)")
+	assert.NotContains(t, out, "Link:", "only the answer to create carries the link")
 }
 
 func TestAFailedPostSaysWhyAndHowToRetry(t *testing.T) {

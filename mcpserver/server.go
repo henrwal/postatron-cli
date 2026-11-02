@@ -42,6 +42,12 @@ const (
 	ToolGetAnalytics   = "get_analytics"
 	ToolCreateUpload   = "create_upload"
 	ToolGetUpload      = "get_upload"
+
+	ToolCreateProfile        = "create_profile"
+	ToolUpdateProfile        = "update_profile"
+	ToolDeleteProfile        = "delete_profile"
+	ToolCreateConnectSession = "create_connect_session"
+	ToolGetConnectSession    = "get_connect_session"
 )
 
 // Descriptions, word for word the remote server's.
@@ -86,6 +92,17 @@ const (
 		"Metrics a platform does not report come back as null. X and Pinterest are not included. YouTube's numbers are in the per-platform totals as YouTube reports them, " +
 		"but YouTube's policies keep them out of engagement totals, rates and top_posts. Each account is read at most once an hour (last_sync_at, next_sync_at)."
 	descGetUsage = "This month's usage: posts per platform, which are not capped, and how much of the plan's monthly X post and X link post caps is used (x_posts, x_link_posts), with the account allowance and rate limits."
+
+	descCreateProfile = "Create a profile: a group of connected accounts for one brand or client, holding at most one account per platform. " +
+		"An app that lets its own customers connect their accounts makes one per customer, then calls create_connect_session for it. " +
+		"Plans limit how many profiles an account can have."
+	descUpdateProfile        = "Rename a profile. Its accounts, posts and queues stay as they are."
+	descDeleteProfile        = "Delete a profile with no accounts in it. Disconnect or move its accounts in the dashboard first; the Default profile cannot be deleted."
+	descCreateConnectSession = "Create a hosted connect link, so someone with no Postatron login, such as a customer of the person's own app, can connect one of their social accounts into a profile. " +
+		"Send them to the url: Postatron's page says who is asking, runs the platform's sign-in, then sends them to redirect_url with status=connected and account_id (or status=error) in the query. " +
+		"The link works until an account is connected through it, or it expires (an hour by default). To connect the person's own account, use connect_account instead."
+	descGetConnectSession = "Check a hosted connect link from create_connect_session: pending until an account is connected through it, then connected with that account, or expired. " +
+		"Use it to confirm what a redirect said, since anyone can type a query string."
 )
 
 // CreatePostInput is the create_post tool input.
@@ -165,6 +182,36 @@ type ConnectAccountInput struct {
 	Platform  string `json:"platform,omitempty" jsonschema:"The network to connect: x, instagram, facebook, linkedin, tiktok, youtube, threads, bluesky or pinterest (a Pinterest business account). Optional with account_id."`
 	Profile   string `json:"profile,omitempty" jsonschema:"A profile name or id from list_profiles to put the account in. Omit for the Default profile."`
 	AccountID string `json:"account_id,omitempty" jsonschema:"A connected account's id, to sign that account in again where it is, instead of connecting a new one."`
+}
+
+// CreateProfileInput is the create_profile tool input.
+type CreateProfileInput struct {
+	Name string `json:"name" jsonschema:"What to call it, such as the customer's name: up to 40 characters, unique in the account."`
+}
+
+// UpdateProfileInput is the update_profile tool input.
+type UpdateProfileInput struct {
+	Profile string `json:"profile" jsonschema:"The profile's name or id from list_profiles."`
+	Name    string `json:"name" jsonschema:"Its new name, up to 40 characters."`
+}
+
+// ProfileInput is the delete_profile tool input.
+type ProfileInput struct {
+	Profile string `json:"profile" jsonschema:"The profile's name or id from list_profiles."`
+}
+
+// CreateConnectSessionInput is the create_connect_session tool input.
+type CreateConnectSessionInput struct {
+	Profile     string   `json:"profile,omitempty" jsonschema:"The profile (a name or id from list_profiles, or one made with create_profile) the account joins. Required unless account_id is given."`
+	Platforms   []string `json:"platforms,omitempty" jsonschema:"Platforms the person may choose from: x, instagram, facebook, linkedin, linkedin_page, tiktok, youtube, threads, bluesky or pinterest. Omit to offer every platform the profile has no account on yet."`
+	AccountID   string   `json:"account_id,omitempty" jsonschema:"A connected account's id, so its owner can sign it in again where it is (for reconnect_required) instead of connecting a new one."`
+	RedirectURL string   `json:"redirect_url" jsonschema:"Where the person's browser goes afterwards: an https address of the app, or http on localhost while developing."`
+	ExpiresIn   int      `json:"expires_in,omitempty" jsonschema:"Seconds the link works for, 300 to 86400. Default 3600."`
+}
+
+// ConnectSessionIDInput is the get_connect_session tool input.
+type ConnectSessionIDInput struct {
+	SessionID string `json:"session_id" jsonschema:"The id from create_connect_session."`
 }
 
 // ListPostsInput is the list_posts tool input.
@@ -262,6 +309,69 @@ func New(ops apiv1.Operations) *mcp.Server {
 				return handleError[*apiv1.QueueList](err)
 			}
 			return nil, out, nil
+		})
+
+	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolCreateProfile, Description: descCreateProfile}),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in CreateProfileInput) (*mcp.CallToolResult, *apiv1.Profile, error) {
+			out, err := ops.CreateProfile(ctx, apiv1.CreateProfileRequest{Name: strings.TrimSpace(in.Name)})
+			if err != nil {
+				return handleError[*apiv1.Profile](err)
+			}
+			return nil, withAccounts(out), nil
+		})
+
+	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolUpdateProfile, Description: descUpdateProfile}),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in UpdateProfileInput) (*mcp.CallToolResult, *apiv1.Profile, error) {
+			id := strings.TrimSpace(in.Profile)
+			if id == "" {
+				return nil, nil, errors.New("profile is required")
+			}
+			out, err := ops.UpdateProfile(ctx, id, apiv1.UpdateProfileRequest{Name: strings.TrimSpace(in.Name)})
+			if err != nil {
+				return handleError[*apiv1.Profile](err)
+			}
+			return nil, withAccounts(out), nil
+		})
+
+	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolDeleteProfile, Description: descDeleteProfile}),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in ProfileInput) (*mcp.CallToolResult, *apiv1.DeleteProfileResponse, error) {
+			id := strings.TrimSpace(in.Profile)
+			if id == "" {
+				return nil, nil, errors.New("profile is required")
+			}
+			out, err := ops.DeleteProfile(ctx, id)
+			if err != nil {
+				return handleError[*apiv1.DeleteProfileResponse](err)
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolCreateConnectSession, Description: descCreateConnectSession}),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in CreateConnectSessionInput) (*mcp.CallToolResult, *apiv1.ConnectSession, error) {
+			out, err := ops.CreateConnectSession(ctx, apiv1.CreateConnectSessionRequest{
+				Profile:     strings.TrimSpace(in.Profile),
+				Platforms:   in.Platforms,
+				AccountID:   strings.TrimSpace(in.AccountID),
+				RedirectURL: strings.TrimSpace(in.RedirectURL),
+				ExpiresIn:   in.ExpiresIn,
+			})
+			if err != nil {
+				return handleError[*apiv1.ConnectSession](err)
+			}
+			return nil, withPlatforms(out), nil
+		})
+
+	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolGetConnectSession, Description: descGetConnectSession}),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in ConnectSessionIDInput) (*mcp.CallToolResult, *apiv1.ConnectSession, error) {
+			id := strings.TrimSpace(in.SessionID)
+			if id == "" {
+				return nil, nil, errors.New("session_id is required")
+			}
+			out, err := ops.GetConnectSession(ctx, id)
+			if err != nil {
+				return handleError[*apiv1.ConnectSession](err)
+			}
+			return nil, withPlatforms(out), nil
 		})
 
 	mcp.AddTool(server, describe(&mcp.Tool{Name: ToolCreatePost, Description: descCreatePost}),
@@ -520,6 +630,13 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolListEvents:     readOnly("List recent events"),
 	ToolGetAnalytics:   readOnly("Get post analytics"),
 	ToolGetUsage:       readOnly("Get plan usage"),
+	// Profiles are the person's own settings, like queues.
+	ToolCreateProfile: {Title: "Create a profile", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
+	ToolUpdateProfile: {Title: "Rename a profile", DestructiveHint: boolPtr(false), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	ToolDeleteProfile: {Title: "Delete a profile", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	// A link only, as connect_account: nothing changes until someone signs in.
+	ToolCreateConnectSession: {Title: "Create a hosted connect link", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
+	ToolGetConnectSession:    readOnly("Check a hosted connect link"),
 }
 
 // readOnly is the remote server's readOnly(): reads only, safe to repeat.
@@ -543,6 +660,24 @@ func describe(tool *mcp.Tool) *mcp.Tool {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+// withAccounts gives a profile an empty account list rather than none, for
+// the same reason as withPlatforms.
+func withAccounts(profile *apiv1.Profile) *apiv1.Profile {
+	if profile != nil && profile.Accounts == nil {
+		profile.Accounts = []apiv1.Account{}
+	}
+	return profile
+}
+
+// withPlatforms gives a session an empty platform list rather than none: the
+// tool's output schema says it is an array, and null fails the SDK's check.
+func withPlatforms(session *apiv1.ConnectSession) *apiv1.ConnectSession {
+	if session != nil && session.Platforms == nil {
+		session.Platforms = []string{}
+	}
+	return session
+}
 
 // handleError renders API errors with their code, retry hint and details.
 // The SDK turns any returned error into an isError tool result, so the model
