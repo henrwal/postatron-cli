@@ -621,7 +621,10 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolRetryPost: destructive("Retry a failed post", false),
 	// A queue changes the person's settings, not anything anyone else sees.
 	ToolCreateQueue: {Title: "Create a queue", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
-	ToolUpdateQueue: {Title: "Change a queue", DestructiveHint: boolPtr(false), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	// Destructive because it changes what exists: with move_posts it moves
+	// scheduled posts to new times, and the directory asks for the hint on any
+	// tool that modifies data.
+	ToolUpdateQueue: {Title: "Change a queue", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
 	ToolDeleteQueue: {Title: "Delete a queue", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
 	// A link only; nothing changes until the person finishes signing in.
 	ToolConnectAccount: {Title: "Connect a social account", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},
@@ -632,7 +635,7 @@ var toolNotes = map[string]mcp.ToolAnnotations{
 	ToolGetUsage:       readOnly("Get plan usage"),
 	// Profiles are the person's own settings, like queues.
 	ToolCreateProfile: {Title: "Create a profile", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)},
-	ToolUpdateProfile: {Title: "Rename a profile", DestructiveHint: boolPtr(false), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
+	ToolUpdateProfile: {Title: "Rename a profile", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
 	ToolDeleteProfile: {Title: "Delete a profile", DestructiveHint: boolPtr(true), IdempotentHint: true, OpenWorldHint: boolPtr(false)},
 	// A link only, as connect_account: nothing changes until someone signs in.
 	ToolCreateConnectSession: {Title: "Create a hosted connect link", DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(true)},

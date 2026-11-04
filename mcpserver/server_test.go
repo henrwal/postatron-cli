@@ -219,9 +219,9 @@ func TestExposesTheSameToolsAsTheRemoteServer(t *testing.T) {
 		assert.Equal(t, tool.Title, tool.Annotations.Title, tool.Name)
 		isRead := strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "get_")
 		assert.Equal(t, isRead, tool.Annotations.ReadOnlyHint, tool.Name)
-		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "delete_posts" || tool.Name == "update_post" || tool.Name == "delete_queue" || tool.Name == "retry_post" {
+		if tool.Name == "create_post" || tool.Name == "delete_post" || tool.Name == "delete_posts" || tool.Name == "update_post" || tool.Name == "delete_queue" || tool.Name == "retry_post" || tool.Name == "update_queue" || tool.Name == "update_profile" || tool.Name == "delete_profile" {
 			require.NotNil(t, tool.Annotations.DestructiveHint, tool.Name)
-			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes or deletes on real accounts", tool.Name)
+			assert.True(t, *tool.Annotations.DestructiveHint, "%s publishes, changes or deletes something that exists", tool.Name)
 		}
 	}
 	assert.ElementsMatch(t, []string{
