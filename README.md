@@ -17,7 +17,9 @@ Postatron hosts its MCP server at:
 https://api.postatron.com/mcp
 ```
 
-Add it as a custom connector in Claude (Settings → Connectors → Add custom connector) and sign in when asked.
+In Claude, Postatron is in the connector directory: Settings → Connectors → Browse connectors, find Postatron and click Connect, or open https://claude.ai/directory/postatron.
+Or add it by hand as a custom connector (Settings → Connectors → Add custom connector) with the URL above.
+Either way, sign in to Postatron when asked.
 
 Claude Code: install the plugin, which connects the server and adds the Postatron skill in one step.
 

@@ -60,7 +60,9 @@ Only Pinterest business accounts can be connected; a free one will do.
 
 ## Remote
 
-Claude: **Settings → Connectors → Add custom connector**, URL `https://api.postatron.com/mcp`, then sign in to Postatron and approve the connection.
+Claude: Postatron is in Claude's connector directory. Open **Settings → Connectors → Browse connectors**, find Postatron and click **Connect**, or open https://claude.ai/directory/postatron.
+Where the directory is not offered, use **Add custom connector** with the URL `https://api.postatron.com/mcp`.
+Then sign in to Postatron and approve the connection.
 
 Claude Code: the plugin connects the server and adds the Postatron skill, which teaches the agent the workflow (profiles, timezones, platform limits, confirming before publishing).
 
