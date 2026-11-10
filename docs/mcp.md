@@ -79,6 +79,18 @@ Or connect the server alone:
 claude mcp add --transport http postatron https://api.postatron.com/mcp
 ```
 
+Cursor: install the Postatron plugin from the Cursor Marketplace once it is listed, or add the server with one click:
+[Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=postatron&config=eyJ1cmwiOiJodHRwczovL2FwaS5wb3N0YXRyb24uY29tL21jcCJ9).
+Cursor signs you in to Postatron the first time it uses it.
+
+Gemini CLI: install the extension, which connects the server and adds the Postatron skill, then sign in.
+
+```bash
+gemini extensions install https://github.com/henrwal/postatron-cli
+```
+
+Then run `/mcp auth postatron` in Gemini CLI.
+
 Either way, run `/mcp` in a session to sign in.
 
 Any other client that supports remote MCP servers with OAuth 2.1 and dynamic client registration connects the same way.

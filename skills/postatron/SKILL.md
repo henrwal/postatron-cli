@@ -20,6 +20,8 @@ If none is set up, tell the person how to connect and stop:
 
 - Claude: Settings → Connectors → Browse connectors, find Postatron and click Connect (or open https://claude.ai/directory/postatron), then sign in. Where the directory is not offered, add a custom connector with the URL `https://api.postatron.com/mcp`.
 - Claude Code: `/plugin install postatron --marketplace henrwal/postatron-cli` (or `claude mcp add --transport http postatron https://api.postatron.com/mcp`), then `/mcp` to sign in.
+- Cursor: install the Postatron plugin, or add the server at https://api.postatron.com/mcp in Cursor's MCP settings, and sign in when asked.
+- Gemini CLI: `gemini extensions install https://github.com/henrwal/postatron-cli`, then `/mcp auth postatron`.
 - Terminal: create a key at https://postatron.com/dashboard/api, `export POSTATRON_API_KEY=...`, and install the CLI with `go install github.com/henrwal/postatron-cli/cmd/postatron@latest` or a binary from https://github.com/henrwal/postatron-cli/releases.
 
 Never ask for the API key in the conversation, and never print it.

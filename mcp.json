@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "postatron": {
+      "url": "https://api.postatron.com/mcp"
+    }
+  }
+}

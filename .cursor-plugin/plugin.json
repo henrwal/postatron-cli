@@ -1,0 +1,15 @@
+{
+  "name": "postatron",
+  "displayName": "Postatron",
+  "version": "1.11.3",
+  "description": "Schedule, publish and manage social media posts on X, Instagram, LinkedIn, TikTok, Facebook, Threads, Bluesky and YouTube, and see how they performed. Connects Postatron's remote MCP server and adds the Postatron skill.",
+  "author": {
+    "name": "Postatron",
+    "email": "support@postatron.com"
+  },
+  "homepage": "https://postatron.com/agents/cursor",
+  "repository": "https://github.com/henrwal/postatron-cli",
+  "license": "MIT",
+  "keywords": ["social media", "scheduling", "publishing", "x", "instagram", "linkedin", "tiktok", "bluesky", "mcp"],
+  "logo": "assets/postatron-icon.png"
+}
