@@ -4215,6 +4215,16 @@
               "manual",
               "performance"
             ]
+          },
+          "image_shape": {
+            "type": "string",
+            "description": "The shape a feed image or carousel goes out in, cropped from the centre. `original` (the default) keeps an image's own shape when Instagram takes it, between 4:5 and 1.91:1, and crops it to the nearer of those otherwise; `square` is 1:1, `portrait` 4:5 and `landscape` 1.91:1. A carousel takes its first image's shape. Not for stories, reels or video.",
+            "enum": [
+              "original",
+              "square",
+              "portrait",
+              "landscape"
+            ]
           }
         }
       },

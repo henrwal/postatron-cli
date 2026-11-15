@@ -34,6 +34,7 @@ There are two ways to connect, with the same tools:
 | `get_upload` | `GET /v1/media/uploads/{id}` | `upload_id` |
 
 The twenty-four tools, their arguments, descriptions and hints are the same on both servers.
+The per-platform options (`x`, `instagram`, `tiktok`, `youtube`, `pinterest`) take the fields `docs/api.md` lists under Platform options; for example `{"instagram": {"image_shape": "square"}}` sends a feed image or carousel to Instagram cropped square from the centre.
 The local server also takes `id` in place of `post_id` on `get_post` and `delete_post`, the name it used before.
 Tool calls are metered and rate limited exactly like the API (see `docs/api.md`).
 API errors come back as tool errors with the API's `code` and message, so the model can explain a quota or scope problem, or ask which profile you meant, instead of failing silently.

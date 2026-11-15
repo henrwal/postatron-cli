@@ -279,6 +279,7 @@ Each needs an account on its platform among the post's accounts.
 | Instagram | `user_tags` | `{username, x, y, media_index}` tags on images, `x` and `y` from 0 to 1 |
 | Instagram | `ai_generated` | Ask Instagram to show its AI label |
 | Instagram | `trial_reel` | `manual` or `performance`: share a reel with non-followers first |
+| Instagram | `image_shape` | `original` (default), `square` (1:1), `portrait` (4:5) or `landscape` (1.91:1): the shape a feed image or carousel goes out in, cropped from the centre. Original keeps an image's own shape between 4:5 and 1.91:1 and crops one outside to the nearer; a carousel takes its first image's shape |
 | TikTok | `title` | A video's caption, up to 2,200 characters, in place of `content`; or a photo post's title, up to 90 |
 | TikTok | `description` | A photo post's text, up to 4,000 characters, in place of `content` |
 | TikTok | `draft` | Send it to the creator's TikTok inbox to finish in the app, instead of publishing |

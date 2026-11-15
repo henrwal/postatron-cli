@@ -206,7 +206,22 @@ type InstagramOptions struct {
 	// TrialReel shares a reel with non-followers first: manual (graduate it
 	// by hand) or performance (Instagram graduates it if it does well).
 	TrialReel string `json:"trial_reel,omitempty"`
+	// ImageShape is the shape a feed image or carousel goes out in: original
+	// (the default; an image is kept in its own shape when Instagram takes it,
+	// between 4:5 and 1.91:1, and cropped to the nearer of those otherwise),
+	// square (1:1), portrait (4:5) or landscape (1.91:1). Postatron crops from
+	// the centre; a carousel takes its first image's shape. Not for stories,
+	// reels or video. See the InstagramShape constants.
+	ImageShape string `json:"image_shape,omitempty"`
 }
+
+// Instagram image shapes for InstagramOptions.ImageShape.
+const (
+	InstagramShapeOriginal  = "original"
+	InstagramShapeSquare    = "square"
+	InstagramShapePortrait  = "portrait"
+	InstagramShapeLandscape = "landscape"
+)
 
 // InstagramUserTag tags a username on one image, at X and Y from 0 to 1
 // across and down it. MediaIndex counts the post's media from 0.

@@ -66,7 +66,7 @@ Build JSON bodies with `jq -n --arg content "$text" '{content: $content, ...}'` 
 | `scheduled_at` | RFC 3339 with an offset, at least 5 minutes ahead. Omit to publish now. |
 | `queue` | A queue name or id from `/v1/queues`. The post takes its next free slot; not with `scheduled_at`. |
 | `x` | X options: `content`, `thread` (`[{content, media_urls, media_ids}]`), `community`, `share_with_followers`, `reply_settings`, `long_post`, `poll` (`{options, duration_minutes}`). |
-| `instagram` | `post_type`, `caption`, `first_comment`, `collaborators`, `user_tags`, `ai_generated`, `trial_reel`. |
+| `instagram` | `post_type`, `caption`, `first_comment`, `collaborators`, `user_tags`, `ai_generated`, `trial_reel`, `image_shape` (`original`, `square`, `portrait` or `landscape`). |
 | `tiktok` | `title`, `description`, `draft`, `privacy`, `disable_comment`, `disable_duet`, `disable_stitch`, `commercial_content`, `your_brand`, `branded_content`, `music_usage_confirmed`, `auto_add_music`, `ai_generated`. A direct post needs all the required ones; a `draft` (or no block) goes to the creator's inbox. |
 | `youtube` | `title`, `description`, `privacy` (`public`, `unlisted`, `private`), `made_for_kids`, `tags`, `category_id`, `thumbnail_url` or `thumbnail_id`. `first_comment` is refused for now. |
 | `pinterest` | `board` (a board's name or id, for every Pinterest account) or `boards` (`{account_id: board}`, which wins for the accounts it names), `title` (up to 100, default the first line of `content`), `description` (up to 800, replacing `content`), `link`. Left out, the board is the account's default (`default_board_id`); an unknown board, or none and no default, is refused with the account's board names in `details.boards`. |
